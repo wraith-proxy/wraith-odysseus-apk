@@ -22,6 +22,7 @@ import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
+import okhttp3.mockwebserver.SocketPolicy
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.After
@@ -45,6 +46,11 @@ class ChatViewModelTest {
     @Volatile private var chatStream = MockResponse().setResponseCode(500)
     /** Held shut, an older-page request waits on it. */
     @Volatile private var olderGate = CountDownLatch(0)
+    /** Rows deleted from the session, e.g. from the web UI. */
+    @Volatile private var deleted = emptySet<Int>()
+    /** What GET /api/chat/resume answers, once [resumeGate] opens. */
+    @Volatile private var resume = MockResponse().setResponseCode(404)
+    @Volatile private var resumeGate = CountDownLatch(0)
 
     private fun fixture(name: String) =
         checkNotNull(javaClass.classLoader?.getResource("fixtures/$name")) { name }.readText()
@@ -58,14 +64,19 @@ class ChatViewModelTest {
                 "/api/models" -> return MockResponse().setBody("""{"items":[]}""")
                 "/api/upload" -> return MockResponse().setBody(fixture("upload.json"))
                 "/api/chat_stream" -> return chatStream
+                "/api/chat/resume/s1" -> {
+                    resumeGate.await(10, TimeUnit.SECONDS)
+                    return resume
+                }
             }
             historyPaths += checkNotNull(request.path)
             val limit = url.queryParameter("limit")!!.toInt()
             val asked = url.queryParameter("offset")?.toInt()
             if (asked != null) olderGate.await(10, TimeUnit.SECONDS)
-            val total = total
+            val ids = (0 until total).filter { it !in deleted }
+            val total = ids.size
             val offset = asked ?: maxOf(total - limit, 0)
-            val rows = (offset until minOf(offset + limit, total)).map { i ->
+            val rows = ids.subList(offset, minOf(offset + limit, total)).map { i ->
                 JSONObject()
                     .put("role", if (i % 2 == 0) "user" else "assistant")
                     .put("content", "message $i")
@@ -138,6 +149,69 @@ class ChatViewModelTest {
         vm.loadOlder()
         settle()
         assertEquals((0 until 82).map { "m-$it" }, vm.messages.map { it.dbId })
+    }
+
+    @Test
+    fun loadingOlderAfterAnEarlierRowIsDeletedSkipsRowsAlreadyShown() = runBlocking {
+        val vm = vm()
+        settle()
+        // Deleted elsewhere: row 30 slides back into the older page.
+        deleted = setOf(5)
+        vm.loadOlder()
+        settle()
+        val ids = vm.messages.map { it.dbId }
+        assertEquals(((0 until 80) - 5).map { "m-$it" }, ids)
+    }
+
+    @Test
+    fun aResumeProbeLeavesTheScreenAloneUntilARunTurnsUp() = runBlocking {
+        val vm = vm()
+        settle()
+        vm.error = "earlier"
+        resumeGate = CountDownLatch(1)
+        vm.attach()
+        delay(50)
+        assertFalse(vm.running)
+        assertNull(vm.live)
+        assertEquals("earlier", vm.error)
+        resumeGate.countDown()
+        settle()
+        assertFalse(vm.running)
+        assertEquals("earlier", vm.error)
+    }
+
+    @Test
+    fun aPendingApprovalSurvivesFailuresThatSentNothing() = runBlocking {
+        val vm = vm()
+        settle()
+        chatStream = MockResponse().setHeader("Content-Type", "text/event-stream")
+            .setHeader("X-Odysseus-Run-Id", "run-1").setBody(fixture("sse_tool_approval.txt"))
+        vm.draft = "email carol"
+        vm.send()
+        settle()
+        val gate = checkNotNull(vm.ask)
+        assertEquals("apr_5f1c0d9e2b7a4c3d", gate.approvalId)
+
+        // A resume that cannot reach the server.
+        resume = MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AFTER_REQUEST)
+        vm.attach()
+        settle()
+        assertEquals("Could not reach the server", vm.error)
+        assertEquals(gate, vm.ask)
+
+        // An approval whose re-POST never got through can be tried again.
+        chatStream = MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AFTER_REQUEST)
+        vm.decide(gate.options.first())
+        settle()
+        assertEquals("Could not reach the server", vm.error)
+        assertEquals(gate, vm.ask)
+
+        // An expired one cannot.
+        chatStream = MockResponse().setResponseCode(409).setBody(fixture("chat_stream_409_approval.json"))
+        vm.decide(gate.options.first())
+        settle()
+        assertEquals("Approval expired", vm.error)
+        assertNull(vm.ask)
     }
 
     @Test

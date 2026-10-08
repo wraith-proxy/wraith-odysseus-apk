@@ -146,7 +146,10 @@ class ChatApi(private val http: Http) {
                 // Minutes east of UTC, which is what getOffset already is.
                 .header("X-Tz-Offset", (tz.getOffset(now) / 60_000).toString())
                 .header("X-Tz-Name", tz.id)
-                .build()
+                .build(),
+            // Re-sent after a dropped connection it would be a second
+            // message (or a 409 for an approval already used).
+            retry = false,
         )
     }
 
@@ -196,8 +199,8 @@ class ChatApi(private val http: Http) {
         }
     }
 
-    private suspend fun stream(request: Request): RunStream {
-        val response = http.open(request, Http.STREAM_TIMEOUT_S)
+    private suspend fun stream(request: Request, retry: Boolean = true): RunStream {
+        val response = http.open(request, Http.STREAM_TIMEOUT_S, retry)
         return RunStream(response.header(RUN_ID), response.sseFrames().map(SseParser::decode))
     }
 

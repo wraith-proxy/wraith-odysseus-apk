@@ -27,6 +27,7 @@ import com.thomaspeoples.wraithodysseus.net.ApiException
 import java.io.IOException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import org.json.JSONException
@@ -85,6 +86,8 @@ class ChatViewModel(
         private set
 
     private var follower: RunFollower? = null
+    /** An [attach] still waiting to hear whether a run is going. */
+    private var probe: Job? = null
 
     init {
         viewModelScope.launch {
@@ -97,15 +100,16 @@ class ChatViewModel(
     /** On (re)entering the screen: pick up a run that is still going, e.g.
      * one started before the screen was left or from the web UI. */
     fun attach() {
-        if (running) return
-        start { api.resume(sessionId) }
+        if (running || probe?.isActive == true) return
+        start(quiet = true) { api.resume(sessionId) }
     }
 
     /** One load at a time. The limit stops the page exactly where the shown
      * rows begin (the last page need not start on a multiple of 50). A
      * reload that lands mid-load moves where the shown rows begin, and the
      * page then no longer joins up with them: it is dropped, and the next
-     * tap loads from the new start. */
+     * tap loads from the new start. Rows deleted elsewhere also move where
+     * the page ends, so rows already shown are left out of it. */
     fun loadOlder() {
         if (!hasOlder || loadingOlder) return
         loadingOlder = true
@@ -115,7 +119,8 @@ class ChatViewModel(
                 val from = maxOf(until - ChatApi.PAGE, 0)
                 val page = api.history(sessionId, from, until - from)
                 if (offset != until) return@report
-                messages = page.messages + messages
+                val shown = messages.mapNotNull { it.dbId }.toSet()
+                messages = page.messages.filter { it.dbId == null || it.dbId !in shown } + messages
                 offset = page.offset
                 hasOlder = page.hasMoreBefore
             }
@@ -156,7 +161,8 @@ class ChatViewModel(
         val value = option.value ?: return
         if (running) return
         ask = null
-        start(expiredOn409 = true) {
+        // Not sent (unlike an expired one): the gate comes back to retry.
+        start(expiredOn409 = true, rejected = { if (ask == null && error != EXPIRED) ask = gate }) {
             api.chatStream(request("", emptyList(), ToolApproval(approvalId, value)))
         }
     }
@@ -204,30 +210,45 @@ class ChatViewModel(
     )
 
     /** [rejected], if given, runs instead of the history reload when [open]
-     * itself fails, i.e. no stream was ever opened. */
-    private fun start(expiredOn409: Boolean = false, rejected: (() -> Unit)? = null, open: suspend () -> RunStream?) {
-        running = true
-        error = null
-        viewModelScope.launch {
-            val f = RunFollower(api, sessionId).also { follower = it }
-            val mirror = launch { f.turn.collect { live = it } }
+     * itself fails, i.e. no stream was ever opened. [quiet] leaves the screen
+     * as it is until [open] gives a stream (a resume probe usually gets
+     * none); any other start cancels a quiet one still waiting. */
+    private fun start(
+        expiredOn409: Boolean = false,
+        quiet: Boolean = false,
+        rejected: (() -> Unit)? = null,
+        open: suspend () -> RunStream?,
+    ) {
+        probe?.cancel()
+        if (!quiet) {
+            running = true
+            error = null
+        }
+        val job = viewModelScope.launch {
+            val f = RunFollower(api, sessionId)
+            var mirror: Job? = null
             var opened = false
             val end = try {
                 open().also { opened = true }?.let { stream ->
+                    running = true
+                    error = null
+                    follower = f
+                    mirror = launch { f.turn.collect { live = it } }
                     canStop = stream.runId != null
                     f.follow(stream)
                 }
             } catch (e: ApiException) {
-                RunEnd.Failed(if (expiredOn409 && e.status == 409) "Approval expired" else e.message)
+                RunEnd.Failed(if (expiredOn409 && e.status == 409) EXPIRED else e.message)
             } catch (_: IOException) {
                 RunEnd.Failed("Could not reach the server")
             } catch (_: JSONException) {
                 RunEnd.Failed(UNEXPECTED)
             }
-            mirror.cancel()
+            mirror?.cancel()
             val last = f.turn.value
             if (end != null) {
-                ask = last.ask
+                // Not opened, nothing was asked: a question still pending stays.
+                if (opened) ask = last.ask
                 error = (end as? RunEnd.Failed)?.message ?: last.error
                 if (!opened && rejected != null) rejected() else reloadHistory()
             }
@@ -236,6 +257,7 @@ class ChatViewModel(
             canStop = false
             follower = null
         }
+        if (quiet) probe = job
     }
 
     /** Back to the last page: the finished reply is saved there. */
@@ -262,6 +284,7 @@ class ChatViewModel(
 
     internal companion object {
         const val UNEXPECTED = "Unexpected response from the server"
+        const val EXPIRED = "Approval expired"
 
         // Flat lists of strings and booleans: all a saved-state Bundle holds.
         val TogglesSaver = listSaver<Toggles, Boolean>(

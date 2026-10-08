@@ -106,6 +106,9 @@ fun AppNav() {
     // so a rotation on the login screen does not forget where to go back to.
     var expiredFor by rememberSaveable { mutableStateOf<String?>(null) }
     var updateInfo by remember { mutableStateOf<UpdateChecker.UpdateInfo?>(null) }
+    // Saveable, so a rotation neither checks again nor brings back a
+    // dismissed dialog. Set once nothing is left to show.
+    var updateChecked by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         app.http.sessionExpired.collect {
@@ -119,9 +122,16 @@ fun AppNav() {
     // One check per cold start; a no-op in an F-Droid build. It fails
     // silently and never blocks the UI -- see UpdateChecker.
     LaunchedEffect(Unit) {
+        if (updateChecked) return@LaunchedEffect
         updateInfo = UpdateChecker.checkForUpdate()
+        if (updateInfo == null) updateChecked = true
     }
-    updateInfo?.let { UpdateAvailableDialog(info = it, onDismiss = { updateInfo = null }) }
+    updateInfo?.let {
+        UpdateAvailableDialog(info = it, onDismiss = {
+            updateInfo = null
+            updateChecked = true
+        })
+    }
 
     val menu: @Composable () -> Unit = {
         OverflowMenu(
