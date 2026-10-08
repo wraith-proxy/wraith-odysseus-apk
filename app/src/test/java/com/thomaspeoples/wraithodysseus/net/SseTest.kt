@@ -1,11 +1,16 @@
 package com.thomaspeoples.wraithodysseus.net
 
+import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
+import okhttp3.HttpUrl
 import okhttp3.Protocol
 import okhttp3.Request
 import okhttp3.Response
 import okhttp3.ResponseBody.Companion.toResponseBody
+import okhttp3.mockwebserver.MockResponse
+import okhttp3.mockwebserver.MockWebServer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -14,6 +19,8 @@ import org.junit.Test
 /** Driven by raw SSE captured from the server's own emitters (synthetic
  * content), so the parser is checked against what is really sent. */
 class SseTest {
+
+    private class FakeSession(override var baseUrl: HttpUrl?, override var cookie: SessionCookie?) : SessionState
 
     private fun fixture(name: String) =
         checkNotNull(javaClass.classLoader?.getResource("fixtures/$name")) { name }.readText()
@@ -125,5 +132,27 @@ class SseTest {
     @Test
     fun anUnterminatedLastFrameIsDropped() {
         assertEquals(listOf(SseEvent.Done), parse("data: [DONE]\n\ndata: {\"delta\":\"cut"))
+    }
+
+    @Test
+    fun leavingAStreamMidReadOverHttp11EndsQuietly() = runBlocking {
+        val server = MockWebServer()
+        // One frame, then heartbeats trickling in, so the reader is blocked
+        // mid-body when the collector goes away.
+        server.enqueue(
+            MockResponse().setHeader("Content-Type", "text/event-stream")
+                .setBody("data: {\"delta\":\"a\"}\n\n" + ": heartbeat\n\n".repeat(20))
+                .throttleBody(24, 200, TimeUnit.MILLISECONDS),
+        )
+        server.start()
+        try {
+            val http = Http(FakeSession(server.url("/"), null))
+            val response = http.open(Request.Builder().url(server.url("/api/chat/resume/s1")).build(), Http.STREAM_TIMEOUT_S)
+            // first() only returns once the reader has finished, so whatever
+            // the closed body threw at it would surface right here.
+            assertEquals(SseFrame(null, """{"delta":"a"}"""), response.sseFrames().first())
+        } finally {
+            server.shutdown()
+        }
     }
 }

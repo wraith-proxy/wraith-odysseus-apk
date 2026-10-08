@@ -1,0 +1,41 @@
+# DRAFT fdroiddata recipe, not yet submitted and not yet run through
+# `fdroid lint` / `fdroid build`. Copy to fdroiddata as
+# metadata/com.thomaspeoples.wraithodysseus.yml when the MR is opened.
+#
+# Deliberately left out until then (see docs/ROADMAP.md):
+# - AllowedAPKSigningKeys / Binaries: need a reproducible build first.
+# - Automatic updates: versionCode is derived from appVersionName at build
+#   time, so checkupdates has no literal versionCode to read. Each release is
+#   added by hand, with versionCode = major*10000 + minor*100 + patch.
+# - Per-versionCode changelogs (fastlane/.../changelogs/<versionCode>.txt).
+
+Categories:
+  - Internet
+License: MIT
+AuthorName: Thomas Peoples
+WebSite: https://git.thomaspeoples.com/thomaspeoples/wraith-odysseus-apk
+SourceCode: https://git.thomaspeoples.com/thomaspeoples/wraith-odysseus-apk
+IssueTracker: https://git.thomaspeoples.com/thomaspeoples/wraith-odysseus-apk/issues
+Changelog: https://git.thomaspeoples.com/thomaspeoples/wraith-odysseus-apk/src/branch/main/CHANGELOG.md
+
+AutoName: Wraith for Odysseus
+
+RepoType: git
+Repo: https://git.thomaspeoples.com/thomaspeoples/wraith-odysseus-apk.git
+
+Builds:
+  - versionName: 0.1.0
+    versionCode: 100
+    commit: android-0.1.0
+    subdir: app
+    gradle:
+      - yes
+    # Compiles out the launch-time Gitea update check: F-Droid ships the
+    # updates itself, and the build then contacts only the user's server.
+    gradleprops:
+      - updateCheck=false
+
+AutoUpdateMode: None
+UpdateCheckMode: None
+CurrentVersion: 0.1.0
+CurrentVersionCode: 100

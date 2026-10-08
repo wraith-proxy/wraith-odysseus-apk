@@ -16,8 +16,12 @@ in CI, which is the same state F-Droid's build server sees.
 
 The coverage badge is rendered by `bin/coverage_badge.py` (stdlib only),
 because `genbadge` cannot read Kover's JaCoCo XML. There is no coverage gate.
-Without an emulator the testable surface is the pure logic: the SSE parser,
-the host policy, error-body parsing, the cookie rules and the update check.
+Without an emulator the testable surface is the pure logic plus anything that
+can be driven with MockWebServer: the SSE parser, the host policy, error-body
+parsing, the cookie rules, login and TOTP, the think splitter and turn
+reducer, stream resume without doubled text, the toggle rules, unread paging
+and merging, reply headers, the start-route and return-after-login rules, and
+the update check. The Compose screens themselves are checked on a device.
 
 ## Workflows
 
@@ -83,3 +87,7 @@ docker run --rm -u 1000:1000 -e HOME=/tmp -e GRADLE_USER_HOME=/gradle \
   --entrypoint sh git.thomaspeoples.com/thomaspeoples/ci-actions/ghost-runner-android:latest \
   -c './gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug'
 ```
+
+The full local gate before a branch goes anywhere adds coverage and a release
+build (unsigned unless the `ANDROID_KEYSTORE_*` variables are set):
+`clean testDebugUnitTest koverXmlReport lintDebug assembleDebug assembleRelease`.

@@ -50,20 +50,33 @@ class Http(private val session: SessionState) {
         checkNotNull(session.baseUrl) { "No server set" }.resolve(path)
             ?: throw IllegalArgumentException("Bad path: $path")
 
-    /** For JSON calls: the body of a 2xx response, or ApiException. */
-    suspend fun call(request: Request, readTimeoutSeconds: Long = JSON_TIMEOUT_S): String =
+    /** For JSON calls: the body of a 2xx response, or ApiException. [retry]
+     * false stops OkHttp silently re-sending the request after a connection
+     * failure -- for a POST that must never go out twice. */
+    suspend fun call(request: Request, readTimeoutSeconds: Long = JSON_TIMEOUT_S, retry: Boolean = true): String =
         withContext(Dispatchers.IO) {
-            open(request, readTimeoutSeconds).use { it.body?.string().orEmpty() }
+            open(request, readTimeoutSeconds, retry).use { it.body?.string().orEmpty() }
         }
 
-    /** For streams: a 2xx response the caller must close, or ApiException. */
-    suspend fun open(request: Request, readTimeoutSeconds: Long): Response = withContext(Dispatchers.IO) {
-        val c = if (readTimeoutSeconds == JSON_TIMEOUT_S) client
-        else client.newBuilder().readTimeout(readTimeoutSeconds, TimeUnit.SECONDS).build()
-        val response = c.newCall(withCookie(request)).await()
-        if (response.isSuccessful) return@withContext response
+    /**
+     * For streams: a 2xx response the caller must close, or ApiException.
+     * The response is handed back straight from [await], whose cancellation
+     * handler closes it; returning it out of a withContext would let a cancel
+     * that lands right then drop it unclosed, with its socket still open.
+     */
+    suspend fun open(request: Request, readTimeoutSeconds: Long, retry: Boolean = true): Response {
+        val call = withContext(Dispatchers.IO) {
+            val c = if (readTimeoutSeconds == JSON_TIMEOUT_S && retry) client
+            else client.newBuilder()
+                .readTimeout(readTimeoutSeconds, TimeUnit.SECONDS)
+                .retryOnConnectionFailure(retry)
+                .build()
+            c.newCall(withCookie(request))
+        }
+        val response = call.await()
+        if (response.isSuccessful) return response
 
-        val body = response.use { it.body?.string() }
+        val body = response.use { withContext(Dispatchers.IO) { it.body?.string() } }
         if (response.code == 401 &&
             !request.url.encodedPath.startsWith("/api/auth/") &&
             isNotAuthenticated(body)

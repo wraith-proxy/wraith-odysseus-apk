@@ -4,6 +4,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import okhttp3.Response
 import org.json.JSONObject
@@ -104,19 +105,28 @@ class SseParser {
  * collector closes the response, which is what unblocks a read sitting
  * between heartbeats. A dropped connection surfaces as an IOException from
  * collect, which is the cue to resume.
+ *
+ * On HTTP/1.1, closing under a blocked read does not wake it with an
+ * IOException: the next read (or close itself) can throw
+ * IllegalStateException instead. Once cancelled, whatever the read or the
+ * close throws is noise and is dropped, or it would outlive the cancel.
  */
 fun Response.sseFrames(): Flow<SseFrame> {
     val response = this
     return channelFlow {
         launch(Dispatchers.IO) {
-            val source = checkNotNull(response.body) { "No body" }.source()
-            val parser = SseParser()
-            while (true) {
-                val line = source.readUtf8Line() ?: break
-                parser.feed(line)?.let { send(it) }
+            try {
+                val source = checkNotNull(response.body) { "No body" }.source()
+                val parser = SseParser()
+                while (true) {
+                    val line = source.readUtf8Line() ?: break
+                    parser.feed(line)?.let { send(it) }
+                }
+            } catch (e: Exception) {
+                if (isActive) throw e
             }
             channel.close()
         }
-        awaitClose { response.close() }
+        awaitClose { runCatching { response.close() } }
     }
 }

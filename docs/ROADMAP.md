@@ -8,13 +8,16 @@ need to happen in.
 - [x] Bootstrap: Gradle 8.13 with checksummed wrapper, house CI, theme, fonts,
       icon, and the network core (`Http`, `Sse`, `HostPolicy`,
       `SessionStore`) with unit tests.
-- [ ] Login: server URL and version probe, username + password + TOTP,
+- [x] Login: server URL and version probe, username + password + TOTP,
       logout, session-expired handling.
-- [ ] Chats: sessions, history, streaming with thinking, resume after a drop,
+- [x] Chats: sessions, history, streaming with thinking, resume after a drop,
       stop, model picker, agent/web/research toggles, tool approvals,
       attachments, search.
-- [ ] Email: unread across every account, read, mark unread, send, reply.
-- [ ] About, FAQ, update dialog, fastlane text and screenshots.
+- [x] Email: unread across every account, read, mark unread, send, reply.
+- [x] About, FAQ, update dialog, fastlane text, F-Droid recipe draft,
+      Obtainium preset link.
+- [ ] Fastlane screenshots (`images/phoneScreenshots/1-4.png`), taken on the
+      device with a throwaway account and fake mail.
 - [ ] Owner steps: repo public, keystore minted, secrets set.
 - [ ] Device checklist on a real phone, then 1.0.0.
 
@@ -24,6 +27,9 @@ need to happen in.
   attachments, AI summary and reply.
 - Calendar, notes and tasks.
 - A per-session "running" dot and an unread badge.
+- After Mark unread, put the message back in the inbox list without a manual
+  refresh.
+- Toggles that start from the session's own mode, instead of all off.
 
 ## F-Droid
 
