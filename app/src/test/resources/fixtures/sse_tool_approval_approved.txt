@@ -1,0 +1,12 @@
+data: {"type": "model_info", "model": "qwen3-30b-a3b", "endpoint_id": "ep_local01", "endpoint_label": "Local llama"}
+
+data: {"type": "tool_start", "tool": "send_email", "command": "send_email carol@example.com", "full_command": "send_email carol@example.com", "round": 0, "approved": true}
+
+data: {"type": "tool_output", "tool": "send_email", "command": "send_email carol@example.com", "output": "Email sent to carol@example.com", "exit_code": 0, "approved": true}
+
+data: {"type": "final_response", "content": "Sent.", "render_owner": "structured", "replacement_scope": "turn"}
+
+data: {"type": "message_saved", "id": "m-0106", "render_owner": "structured", "replacement_scope": "turn"}
+
+data: [DONE]
+

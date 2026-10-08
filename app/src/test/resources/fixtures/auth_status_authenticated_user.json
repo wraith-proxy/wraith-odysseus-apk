@@ -1,0 +1,20 @@
+{
+  "configured": true,
+  "authenticated": true,
+  "username": "bob",
+  "is_admin": false,
+  "privileges": {
+    "can_use_agent": true,
+    "can_use_browser": true,
+    "can_use_bash": false,
+    "can_use_documents": true,
+    "can_use_research": true,
+    "can_generate_images": true,
+    "can_manage_memory": true,
+    "max_messages_per_day": 0,
+    "allowed_models": [],
+    "allowed_models_restricted": false,
+    "block_all_models": false
+  },
+  "signup_enabled": false
+}

@@ -1,0 +1,24 @@
+data: {"type": "turn_mode", "mode": "agent", "auto_escalated": false}
+
+data: {"type": "model_info", "model": "qwen3-30b-a3b", "endpoint_id": "ep_local01", "endpoint_label": "Local llama"}
+
+data: {"type": "agent_prep"}
+
+data: {"delta": "Let me check the files.", "render_owner": "streamed"}
+
+data: {"type": "tool_start", "tool": "bash", "command": "ls -la /tmp/project", "full_command": "ls -la /tmp/project", "round": 1, "call_id": "call_01", "tool_call_id": "call_01"}
+
+data: {"type": "tool_progress", "tool": "bash", "round": 1, "elapsed_s": 2, "tail": "total 8"}
+
+data: {"type": "tool_output", "tool": "bash", "command": "ls -la /tmp/project", "output": "total 8\n-rw-r--r-- 1 u u 12 README.md", "exit_code": 0, "execution_attempted": true, "blocked": false}
+
+data: {"type": "agent_step", "round": 2}
+
+data: {"type": "final_response", "content": "The project has one file: README.md.", "render_owner": "structured", "replacement_scope": "turn"}
+
+data: {"type": "agent_terminal", "data": {"rounds": 2}}
+
+data: {"type": "message_saved", "id": "m-0102", "render_owner": "structured", "replacement_scope": "turn"}
+
+data: [DONE]
+

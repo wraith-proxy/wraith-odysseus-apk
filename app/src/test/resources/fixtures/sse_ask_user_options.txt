@@ -1,0 +1,16 @@
+data: {"type": "model_info", "model": "qwen3-30b-a3b", "endpoint_id": "ep_local01", "endpoint_label": "Local llama"}
+
+data: {"type": "tool_start", "tool": "ask_user", "command": "{\"question\": \"Which city should I check the weather for?\", \"options\": [{\"label\": \"Lisbon\", \"description\": \"Portugal\"}, {\"label\": \"Porto\", \"description\": \"\"}], \"multi\": false}", "full_command": "{\"question\": \"Which city should I check the weather for?\", \"options\": [{\"label\": \"Lisbon\", \"description\": \"Portugal\"}, {\"label\": \"Porto\", \"description\": \"\"}], \"multi\": false}", "round": 1}
+
+data: {"delta": "Which city should I check the weather for?", "render_owner": "streamed"}
+
+data: {"type": "tool_output", "tool": "ask_user", "command": "{\"question\": \"Which city should I check the weather for?\", \"options\": [{\"label\": \"Lisbon\", \"description\": \"Portugal\"}, {\"label\": \"Porto\", \"description\": \"\"}], \"multi\": false}", "output": "Asked the user: Which city should I check the weather for?\nOptions: Lisbon, Porto\nAwaiting their selection.", "exit_code": 0, "execution_attempted": false, "blocked": false}
+
+data: {"type": "final_response", "content": "Which city should I check the weather for?", "render_owner": "structured", "replacement_scope": "turn"}
+
+data: {"type": "ask_user", "data": {"question": "Which city should I check the weather for?", "options": [{"label": "Lisbon", "description": "Portugal"}, {"label": "Porto", "description": ""}], "multi": false}}
+
+data: {"type": "message_saved", "id": "m-0104", "render_owner": "structured", "replacement_scope": "turn"}
+
+data: [DONE]
+

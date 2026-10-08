@@ -1,0 +1,39 @@
+site_name: wraith-odysseus-apk
+site_description: Unofficial native Android client for a self-hosted Odysseus AI server
+site_author: Thomas Peoples
+repo_url: https://git.thomaspeoples.com/thomaspeoples/wraith-odysseus-apk
+edit_uri: edit/main/docs/
+site_url: https://www.thomaspeoples.com/gitea-repos/wraith-odysseus-apk/
+use_directory_urls: true
+
+theme:
+  name: material
+  palette:
+    - scheme: slate
+      primary: teal
+      accent: cyan
+  features:
+    - navigation.tabs
+    - content.code.copy
+
+nav:
+  - Home: index.md
+  - Distribution: android-distribution.md
+  - CI: ci.md
+  - Roadmap: ROADMAP.md
+
+plugins:
+  - search
+
+markdown_extensions:
+  - pymdownx.snippets:
+      base_path: ["."]
+  - pymdownx.superfences
+  - admonition
+  - pymdownx.details
+
+extra:
+  links:
+    - icon: material/home
+      link: https://www.thomaspeoples.com/
+      name: Back to Main Site

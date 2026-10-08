@@ -1,0 +1,4 @@
+{
+  "success": false,
+  "error": "No SMTP-capable email account configured"
+}

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- An original ghost: domed head, three-scallop hem, two eyes. Every point
+     sits inside the adaptive-icon safe zone (the centred 66dp circle of this
+     108dp viewport; the farthest corner is ~27dp from centre). The same body
+     path, with the eyes cut out, is the monochrome layer. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Body -->
+    <path
+        android:pathData="M36,52 A18,18 0 0,1 72,52 L72,74 L66,69 L60,74 L54,69 L48,74 L42,69 L36,74 Z"
+        android:fillColor="#E06C75" />
+
+    <!-- Eyes -->
+    <path
+        android:pathData="M43.5,52 A3.5,3.5 0 1,0 50.5,52 A3.5,3.5 0 1,0 43.5,52 Z"
+        android:fillColor="#9CDEF2" />
+    <path
+        android:pathData="M57.5,52 A3.5,3.5 0 1,0 64.5,52 A3.5,3.5 0 1,0 57.5,52 Z"
+        android:fillColor="#9CDEF2" />
+</vector>

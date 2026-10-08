@@ -1,0 +1,16 @@
+data: {"type": "model_info", "model": "qwen3-30b-a3b", "endpoint_id": "ep_local01", "endpoint_label": "Local llama"}
+
+data: {"delta": "Hello"}
+
+data: {"delta": " there"}
+
+: heartbeat 1
+
+: heartbeat 2
+
+data: {"delta": "!"}
+
+data: {"type": "message_saved", "id": "m-0107"}
+
+data: [DONE]
+

@@ -1,0 +1,57 @@
+name: Deploy Gitea Pages
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    # ghost-runner-android, not ubuntu-latest: ubuntu-latest on this forge is
+    # node:18-bullseye, which has neither a JDK nor the Android SDK, and the
+    # coverage report needs a real Gradle build. mkdocs and genbadge are in
+    # the Android image for exactly this reason.
+    runs-on: ghost-runner-android
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Unit tests and coverage report
+        run: ./gradlew testDebugUnitTest koverXmlReport
+
+      # Not genbadge: it only parses Cobertura XML (root tag <coverage>) and
+      # Kover emits JaCoCo (root tag <report>), which it dies on with a bare
+      # AssertionError. bin/coverage_badge.py reads the one counter that
+      # matters and is stdlib-only, so the image needs nothing extra.
+      - name: Generate coverage badge
+        run: python3 bin/coverage_badge.py app/build/reports/kover/report.xml docs/coverage.svg
+
+      - name: Build documentation
+        run: mkdocs build
+
+      - name: Sync to main website repo
+        env:
+          MY_TOKEN: ${{ secrets.GITEATOKEN }}
+          MY_URL: ${{ secrets.GITEAURL }}
+        run: |
+          CLEAN_URL=${MY_URL#*//}
+          git clone https://${MY_TOKEN}@${CLEAN_URL}/thomaspeoples/ghost-site.git main_site
+
+          # thomaspeoples.com roots at www/thomaspeoples/ since ghost-site's
+          # 2026-09 docroot split; www/gitea-repos/ is no longer served.
+          TARGET_DIR="main_site/www/thomaspeoples/gitea-repos/wraith-odysseus-apk"
+          mkdir -p $TARGET_DIR
+
+          rm -rf $TARGET_DIR/*
+          cp -r site/* $TARGET_DIR/
+
+          cd main_site
+          git config user.name "Ghost Runner"
+          git config user.email "runner@ghost-stack.local"
+          git add .
+          if git diff --staged --quiet; then
+            echo "No changes to documentation. Skipping commit."
+          else
+            git commit -m ":books: main: Update docs for wraith-odysseus-apk: ${{ gitea.sha }}"
+            git push origin main
+          fi

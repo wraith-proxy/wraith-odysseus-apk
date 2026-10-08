@@ -1,0 +1,14 @@
+data: {"type": "model_info", "model": "qwen3-30b-a3b", "endpoint_id": "ep_local01", "endpoint_label": "Local llama"}
+
+data: {"delta": "Draft answer", "render_owner": "streamed"}
+
+data: {"type": "final_response", "content": "Structured snapshot", "render_owner": "structured", "replacement_scope": "turn"}
+
+data: {"delta": "Final", "render_owner": "streamed", "replacement_scope": "turn"}
+
+data: {"delta": " synthesis.", "render_owner": "streamed"}
+
+data: {"type": "message_saved", "id": "m-0103", "render_owner": "streamed", "replacement_scope": "turn"}
+
+data: [DONE]
+

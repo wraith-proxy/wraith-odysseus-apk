@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Wraith for Odysseus</string>
+    <!-- A placeholder shape, never a real server: the APK carries no hostname. -->
+    <string name="server_url_hint">https://odysseus.example.ts.net</string>
+</resources>

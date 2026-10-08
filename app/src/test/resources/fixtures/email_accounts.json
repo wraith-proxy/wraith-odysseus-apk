@@ -1,0 +1,61 @@
+{
+  "accounts": [
+    {
+      "id": "acc-home",
+      "name": "Home",
+      "is_default": true,
+      "enabled": true,
+      "imap_host": "imap.example.com",
+      "imap_port": 993,
+      "imap_user": "alice@example.com",
+      "imap_starttls": false,
+      "smtp_host": "smtp.example.com",
+      "smtp_port": 465,
+      "smtp_security": "ssl",
+      "smtp_user": "alice@example.com",
+      "from_address": "alice@example.com",
+      "has_imap_password": true,
+      "has_smtp_password": true,
+      "oauth_provider": "",
+      "display_name": "Alice Example"
+    },
+    {
+      "id": "acc-work",
+      "name": "Work",
+      "is_default": false,
+      "enabled": true,
+      "imap_host": "imap.example.com",
+      "imap_port": 993,
+      "imap_user": "alice@example.org",
+      "imap_starttls": false,
+      "smtp_host": "smtp.example.com",
+      "smtp_port": 465,
+      "smtp_security": "ssl",
+      "smtp_user": "alice@example.org",
+      "from_address": "alice@example.org",
+      "has_imap_password": true,
+      "has_smtp_password": true,
+      "oauth_provider": "",
+      "display_name": "Alice Example"
+    },
+    {
+      "id": "acc-old",
+      "name": "Old",
+      "is_default": false,
+      "enabled": false,
+      "imap_host": "imap.example.com",
+      "imap_port": 993,
+      "imap_user": "alice@example.net",
+      "imap_starttls": false,
+      "smtp_host": "smtp.example.com",
+      "smtp_port": 465,
+      "smtp_security": "ssl",
+      "smtp_user": "alice@example.net",
+      "from_address": "alice@example.net",
+      "has_imap_password": true,
+      "has_smtp_password": true,
+      "oauth_provider": "",
+      "display_name": "Alice Example"
+    }
+  ]
+}

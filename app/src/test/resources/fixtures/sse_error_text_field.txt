@@ -1,0 +1,7 @@
+data: {"type": "model_info", "model": "qwen3-30b-a3b", "endpoint_id": "ep_local01", "endpoint_label": "Local llama"}
+
+event: error
+data: {"status": 429, "text": "Rate limited by provider. Try again shortly."}
+
+data: [DONE]
+

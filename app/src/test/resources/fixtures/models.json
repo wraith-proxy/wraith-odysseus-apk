@@ -1,0 +1,64 @@
+{
+  "hosts": [],
+  "items": [
+    {
+      "host": "custom",
+      "port": 0,
+      "url": "http://llm.example.internal:8080/v1/chat/completions",
+      "models": [
+        "qwen3-30b-a3b",
+        "llama-3.1-8b-instruct"
+      ],
+      "models_display": [
+        "Qwen3 30B A3B",
+        "Llama 3.1 8B Instruct"
+      ],
+      "models_extra": [
+        "text-embedding-nomic"
+      ],
+      "models_extra_display": [
+        "text-embedding-nomic"
+      ],
+      "endpoint_id": "ep_local01",
+      "endpoint_name": "Local llama",
+      "category": "local",
+      "endpoint_kind": "openai",
+      "model_type": "llm",
+      "models_metadata": {}
+    },
+    {
+      "host": "custom",
+      "port": 0,
+      "url": "http://img.example.internal:7860/v1/chat/completions",
+      "models": [
+        "sdxl-turbo"
+      ],
+      "models_display": [
+        "sdxl-turbo"
+      ],
+      "models_extra": [],
+      "models_extra_display": [],
+      "endpoint_id": "ep_image01",
+      "endpoint_name": "Image box",
+      "category": "local",
+      "endpoint_kind": "auto",
+      "model_type": "image",
+      "models_metadata": {}
+    },
+    {
+      "host": "custom",
+      "port": 0,
+      "url": "https://api.example.com/v1/chat/completions",
+      "models": [],
+      "models_display": [],
+      "models_extra": [],
+      "models_extra_display": [],
+      "endpoint_id": "ep_cloud01",
+      "endpoint_name": "Cloud (offline)",
+      "category": "api",
+      "endpoint_kind": "openai",
+      "model_type": "llm",
+      "offline": true
+    }
+  ]
+}

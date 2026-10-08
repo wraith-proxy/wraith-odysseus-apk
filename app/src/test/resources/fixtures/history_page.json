@@ -1,0 +1,60 @@
+{
+  "history": [
+    {
+      "role": "user",
+      "content": "What's a good name for a grey cat?",
+      "metadata": {
+        "_db_id": "m-0001",
+        "timestamp": "2026-10-07T18:01:59.000000Z"
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "How about **Pebble**, *Ash* or `Smokey`?",
+      "metadata": {
+        "model": "qwen3-30b-a3b",
+        "thinking": "Grey things: pebble, ash, smoke.",
+        "thinking_time": "2.4",
+        "_db_id": "m-0002",
+        "timestamp": "2026-10-07T18:02:03.000000Z"
+      }
+    },
+    {
+      "role": "user",
+      "content": "[{\"type\": \"text\", \"text\": \"Describe this photo\"}, {\"type\": \"image_url\", \"image_url\": {\"url\": \"data:image/png;base64,AAAA\"}}]",
+      "metadata": {
+        "attachments": [
+          {
+            "id": "f-9a8b7c6d5e4f",
+            "name": "cat.png",
+            "mime": "image/png",
+            "size": 48211,
+            "checksum_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+            "created_at": "2026-10-07T18:02:05Z",
+            "width": 640,
+            "height": 480
+          }
+        ],
+        "_db_id": "m-0003",
+        "timestamp": "2026-10-07T18:02:05.000000Z"
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "<think>no visible reply was produced</think>",
+      "metadata": {
+        "_db_id": "m-0004",
+        "timestamp": "2026-10-07T18:02:10.000000Z"
+      }
+    }
+  ],
+  "model": "qwen3-30b-a3b",
+  "endpoint_url": "http://llm.example.internal:8080/v1/chat/completions",
+  "endpoint_id": "ep_local01",
+  "name": "qwen3-30b-a3b 9:41:07 AM",
+  "offset": 10,
+  "limit": 50,
+  "total": 14,
+  "has_more_before": true,
+  "has_more_after": false
+}

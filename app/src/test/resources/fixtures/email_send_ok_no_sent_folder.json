@@ -1,0 +1,9 @@
+{
+  "success": true,
+  "queued": false,
+  "message": "Email sent to carol@example.com",
+  "account_id": "acc-home",
+  "sent_folder": null,
+  "sent_uid": null,
+  "message_id": "<170000000000.1.2@example.com>"
+}

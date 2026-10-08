@@ -1,0 +1,11 @@
+# Copy to local.properties (untracked). There is no server URL here: the
+# Odysseus address is typed into the app on the device, so one APK works
+# against anyone's server and no hostname is ever built in.
+
+# Set by Android Studio normally; set it by hand here since this project was
+# built without Studio ever touching it.
+sdk.dir=/path/to/android-sdk
+
+# false builds an APK that never calls the Gitea releases API on launch --
+# what an F-Droid recipe sets, since F-Droid ships its own updates.
+updateCheck=true

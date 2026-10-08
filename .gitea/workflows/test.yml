@@ -1,0 +1,41 @@
+name: Wraith Odysseus APK CI
+
+on:
+  push:
+    branches-ignore:
+      - 'main'
+
+jobs:
+  test-and-verify:
+    # Not ghost-runner: that image is Alpine/musl and the Android SDK's
+    # aapt2/d8 are glibc binaries. See ci-images/Dockerfile.android.
+    runs-on: ghost-runner-android
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # local.properties is absent here on purpose (gitignored -- it carries
+      # machine-specific paths). AGP falls back to ANDROID_HOME, which the
+      # image sets. This is the same state F-Droid's build server sees.
+      - name: Unit tests and coverage
+        run: ./gradlew testDebugUnitTest koverXmlReport
+
+      - name: Android Lint
+        run: ./gradlew lintDebug
+
+      - name: Build debug APK
+        run: ./gradlew assembleDebug
+
+  auto-merge:
+    needs: test-and-verify
+    if: github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Call Central Merge Action
+        uses: https://git.thomaspeoples.com/thomaspeoples/ci-actions/auto-merge@main
+        with:
+          gitea_token: ${{ secrets.giteatoken }}
+          api_url: "${{ secrets.giteaurl }}/api/v1"

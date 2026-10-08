@@ -1,0 +1,16 @@
+{
+  "history": [
+    {
+      "role": "user",
+      "content": "hi"
+    },
+    {
+      "role": "assistant",
+      "content": "Hello!"
+    }
+  ],
+  "model": "qwen3-30b-a3b",
+  "endpoint_url": "http://llm.example.internal:8080/v1/chat/completions",
+  "endpoint_id": "ep_local01",
+  "name": "Greeting"
+}

@@ -1,0 +1,75 @@
+commitizen:
+  name: cz_customize
+  # scm, not uv: there is no pyproject.toml in a Kotlin repo, and nothing
+  # should be invented just to hold a number. The current version is read
+  # straight from the latest git tag.
+  version_provider: scm
+  version_scheme: semver
+  major_version_zero: false
+  update_changelog_on_bump: true
+  # Not cosmetic. UpdateChecker.kt matches this exact tag shape, and so does
+  # Obtainium's asset matcher -- changing it silently breaks every installed
+  # copy's update check.
+  tag_format: android-$version
+  bump_message: ":ghost: chore: release android-$current_version -> android-$new_version [skip ci]"
+
+  # versionName is the only version string in the tree; versionCode is
+  # derived from it at build time, so there is exactly one line to rewrite.
+  version_files:
+    - app/build.gradle.kts:appVersionName
+
+  customize:
+    bump_map:
+      Break: MAJOR
+      break: MAJOR
+      Feature: MINOR
+      feature: MINOR
+      Fix: PATCH
+      fix: PATCH
+      Bug: PATCH
+      bug: PATCH
+
+    bump_pattern: '(feature|fix|bug|break|Feature|Fix|Bug|Break)/[A-Z]{3}-\d{5}'
+
+    commit_parser: '(?P<change_type>feature|fix|bug|break|Feature|Fix|Bug|Break)/[A-Z]{3}-\d{5}: (?P<message>.*)'
+
+    change_type_map:
+      Break: "Breaking Changes"
+      break: "Breaking Changes"
+      Feature: "Features"
+      feature: "Features"
+      Fix: "Bug Fixes"
+      fix: "Bug Fixes"
+      Bug: "Bug Fixes"
+      bug: "Bug Fixes"
+
+    change_type_order:
+      - break
+      - Break
+      - feature
+      - Feature
+      - fix
+      - Fix
+      - bug
+      - Bug
+
+    changelog_pattern: '(feature|fix|bug|break|Feature|Fix|Bug|Break)/[A-Z]{3}-\d{5}'
+
+    example: 'feature/TJP-00001: implement sovereign automation'
+    message_template: '{{change_type}}: {{message}}'
+
+    questions:
+      - name: change_type
+        type: list
+        message: Select the type of change you are committing
+        choices:
+          - {name: "break:   A breaking change", value: break}
+          - {name: "feature: A new feature", value: feature}
+          - {name: "fix:     A standard fix", value: fix}
+          - {name: "bug:     A specific bug fix", value: bug}
+      - name: message
+        type: input
+        message: "Enter a brief description:"
+
+    schema: '<type>/<ticket>: <body>'
+    schema_pattern: '^.*(feature|fix|bug|break|Feature|Fix|Bug|Break)/[A-Z]{3}-\d{5}: (.*)'

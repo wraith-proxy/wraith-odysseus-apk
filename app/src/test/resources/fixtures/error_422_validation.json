@@ -1,0 +1,15 @@
+{
+  "detail": [
+    {
+      "type": "missing",
+      "loc": [
+        "body",
+        "password"
+      ],
+      "msg": "Field required",
+      "input": {
+        "username": "alice"
+      }
+    }
+  ]
+}

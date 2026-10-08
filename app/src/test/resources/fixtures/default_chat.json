@@ -1,0 +1,5 @@
+{
+  "endpoint_id": "ep_local01",
+  "endpoint_url": "http://llm.example.internal:8080/v1/chat/completions",
+  "model": "qwen3-30b-a3b"
+}

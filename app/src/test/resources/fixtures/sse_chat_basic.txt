@@ -1,0 +1,16 @@
+data: {"type": "model_info", "model": "qwen3-30b-a3b", "endpoint_id": "ep_local01", "endpoint_label": "Local llama"}
+
+data: {"delta": "The user wants", "thinking": true}
+
+data: {"delta": " a short greeting.", "thinking": true}
+
+data: {"delta": "Hello"}
+
+data: {"delta": " there!"}
+
+data: {"type": "metrics", "data": {"input_tokens": 21, "output_tokens": 9, "tokens_per_second": 41.2, "response_time": 0.84}}
+
+data: {"type": "message_saved", "id": "m-0100"}
+
+data: [DONE]
+

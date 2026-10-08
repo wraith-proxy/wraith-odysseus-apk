@@ -1,0 +1,171 @@
+name: 'Sovereign Release'
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  # Bumping is pure git + commitizen and needs no Android SDK, so it runs on
+  # the existing Python image, which already has cz baked in.
+  bump:
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    runs-on: ghost-runner
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITEA_TOKEN }}
+
+      - name: Run Ghost Bump
+        uses: https://git.thomaspeoples.com/thomaspeoples/ci-actions/version-bump@main
+        with:
+          gitea_token: ${{ secrets.giteatoken }}
+
+  release-apk:
+    needs: bump
+    runs-on: ghost-runner-android
+    steps:
+      # ref: main, NOT the triggering SHA. actions/checkout defaults to the
+      # commit the run started at, which is the commit BEFORE bump pushed --
+      # checking that out would build and ship the previous version number.
+      - name: Check out the bumped main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.GITEA_TOKEN }}
+
+      # Then build the tag itself, not whatever main is by now: if anything
+      # lands on main between the bump and this job, the APK still matches
+      # the tag it is attached to, byte for byte of source.
+      - name: Resolve and check out the version just tagged
+        id: version
+        run: |
+          set -e
+          TAG=$(git describe --tags --abbrev=0 --match 'android-*')
+          VERSION=${TAG#android-}
+          git checkout "$TAG"
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "FATAL: working tree not clean at $TAG"
+            git status --porcelain
+            exit 1
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Releasing $TAG (version $VERSION)"
+
+      # The debug keystore is generated per machine, so a CI build signed
+      # with it would not be installable over a locally built one. A stable
+      # key is what makes an automated release upgradeable at all.
+      - name: Decode the signing keystore
+        run: echo "${{ secrets.ANDROID_KEYSTORE_B64 }}" | base64 -d > "$RUNNER_TEMP/release.jks"
+
+      - name: Build the signed APK
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/release.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew assembleRelease
+
+      - name: Verify the APK is signed
+        run: |
+          set -e
+          # Name it exactly, never glob. If signing silently no-ops (a
+          # missing or malformed keystore secret), Gradle still succeeds and
+          # emits app-release-unsigned.apk instead -- a glob would happily
+          # ship that, and an unsigned APK cannot be installed at all.
+          APK=app/build/outputs/apk/release/app-release.apk
+          if [ ! -f "$APK" ]; then
+            echo "FATAL: $APK missing. Built artifacts were:"
+            ls -la app/build/outputs/apk/release/ || true
+            echo "An app-release-unsigned.apk here means the signing secrets did not apply."
+            exit 1
+          fi
+
+          # Prove it is actually signed rather than trusting the filename.
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify "$APK"
+
+      # F-Droid rejects an APK whose Signing Block carries anything but
+      # signatures -- notably AGP's encrypted dependency list (0x504b4453),
+      # which dependenciesInfo in app/build.gradle.kts turns off. This walks
+      # the block and fails on any ID other than v2, v3 and the verity
+      # padding, so a plugin update that turns it back on is caught here.
+      - name: Check the APK Signing Block holds signatures only
+        run: |
+          python3 - app/build/outputs/apk/release/app-release.apk <<'PY'
+          import struct, sys
+          ALLOWED = {0x7109871a: "v2", 0xf05368c0: "v3", 0x42726577: "verity padding"}
+          data = open(sys.argv[1], "rb").read()
+          eocd = data.rfind(b"PK\x05\x06", max(0, len(data) - 65557))
+          if eocd < 0:
+              sys.exit("FATAL: no End of Central Directory record")
+          cd_offset = struct.unpack_from("<I", data, eocd + 16)[0]
+          if data[cd_offset - 16:cd_offset] != b"APK Sig Block 42":
+              sys.exit("FATAL: no APK Signing Block")
+          block_size = struct.unpack_from("<Q", data, cd_offset - 24)[0]
+          pos, end = cd_offset - block_size, cd_offset - 24
+          bad = []
+          while pos < end:
+              length, pair_id = struct.unpack_from("<QI", data, pos)
+              print("signing block entry 0x%08x (%s)" % (pair_id, ALLOWED.get(pair_id, "NOT ALLOWED")))
+              if pair_id not in ALLOWED:
+                  bad.append(pair_id)
+              pos += 8 + length
+          if bad:
+              sys.exit("FATAL: unexpected signing block entries: " + ", ".join("0x%08x" % b for b in bad))
+          PY
+
+      - name: Publish the release and attach the APK
+        env:
+          GITEA_TOKEN: ${{ secrets.giteatoken }}
+          API_URL: "${{ secrets.giteaurl }}/api/v1"
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -e
+          APK=app/build/outputs/apk/release/app-release.apk
+
+          # The release body is this version's CHANGELOG.md section, which is
+          # what Obtainium shows as the release notes. JSON is built in Python
+          # so quotes and newlines in commit messages cannot break it.
+          python3 - > release.json <<'PY'
+          import json, os, re
+          version = os.environ["VERSION"]
+          body = "Automated release built from main. Signed with the project release key."
+          try:
+              text = open("CHANGELOG.md").read()
+              m = re.search(r"^## (?:android-)?%s\b.*?\n(.*?)(?=^## |\Z)" % re.escape(version), text, re.S | re.M)
+              if m and m.group(1).strip():
+                  body = m.group(1).strip()
+          except FileNotFoundError:
+              pass
+          print(json.dumps({
+              "tag_name": os.environ["TAG"],
+              "name": "Wraith for Odysseus Android " + version,
+              "body": body,
+              "draft": False,
+              "prerelease": False,
+          }))
+          PY
+
+          RESPONSE=$(curl -s -X POST "$API_URL/repos/$GITHUB_REPOSITORY/releases" \
+            -H "authorization: token $GITEA_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data-binary @release.json)
+
+          RELEASE_ID=$(echo "$RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))")
+          if [ -z "$RELEASE_ID" ]; then
+            echo "FATAL: could not create release. Response:"
+            echo "$RESPONSE" | sed -E 's#https?://[0-9]{1,3}(\.[0-9]{1,3}){3}(:[0-9]+)?#[redacted]#g'
+            exit 1
+          fi
+
+          curl -s -X POST \
+            "$API_URL/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?name=wraith-odysseus.apk" \
+            -H "authorization: token $GITEA_TOKEN" \
+            -F "attachment=@$APK" > /dev/null
+
+          echo "Released $TAG"

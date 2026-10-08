@@ -1,0 +1,15 @@
+# Carries sdk.dir and machine-local overrides (updateCheck). Never committed.
+local.properties
+
+# The release keystore lives in a Gitea secret and an offline backup, never
+# in the tree.
+*.jks
+
+*.iml
+.idea/
+.gradle/
+.kotlin/
+build/
+captures/
+.cxx/
+local.tmp

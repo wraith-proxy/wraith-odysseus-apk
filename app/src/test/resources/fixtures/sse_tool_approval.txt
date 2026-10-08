@@ -1,0 +1,14 @@
+data: {"type": "model_info", "model": "qwen3-30b-a3b", "endpoint_id": "ep_local01", "endpoint_label": "Local llama"}
+
+data: {"delta": "Allow this task to continue?", "render_owner": "streamed"}
+
+data: {"type": "tool_output", "tool": "send_email", "command": "send_email carol@example.com", "output": "Waiting for an exact user approval.", "exit_code": null, "execution_attempted": false, "blocked": false}
+
+data: {"type": "final_response", "content": "Allow this task to continue?", "render_owner": "structured", "replacement_scope": "turn"}
+
+data: {"type": "ask_user", "data": {"kind": "tool_approval", "approval_id": "apr_5f1c0d9e2b7a4c3d", "session_id": "7d3c2f0e-1111-4a2b-9c3d-000000000001", "question": "Allow this task to continue?", "description": "Untrusted context influenced this run, so continuing with otherwise-gated actions needs your explicit approval.", "options": [{"label": "Allow for this task", "value": "approve_task", "description": "Execute the sealed action and allow every otherwise-gated action needed to finish this request. Current tool, account, workspace, and sandbox restrictions still apply."}, {"label": "Allow for this chat session", "value": "approve", "description": "Execute the sealed action and stop asking at this gate for later requests in this chat. Current tool, account, workspace, and sandbox restrictions still apply."}, {"label": "Deny", "value": "deny", "description": "Do not execute the proposed action."}], "action": {"tool": "send_email", "content": "{\"to\": \"carol@example.com\", \"subject\": \"Re: Dinner\"}", "digest": "9c1d2e3f4a5b6c7d", "effects": ["external_send"], "workspace": null, "document_id": null, "document_version": null}}}
+
+data: {"type": "message_saved", "id": "m-0105", "render_owner": "structured", "replacement_scope": "turn"}
+
+data: [DONE]
+

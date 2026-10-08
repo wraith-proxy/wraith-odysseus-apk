@@ -1,0 +1,32 @@
+{
+  "emails": [
+    {
+      "uid": "1001",
+      "message_id": "<a3@example.org>",
+      "subject": "Welcome",
+      "from_name": "Example Team",
+      "from_address": "hello@example.org",
+      "to": "alice@example.com",
+      "cc": "",
+      "date": "2026-09-20T10:13:20+00:00",
+      "date_display": "Tue, 07 Oct 2026 17:30:00 +0000",
+      "date_epoch": 1790000000.0,
+      "size": 4210,
+      "is_read": false,
+      "is_answered": false,
+      "is_flagged": false,
+      "flags": "",
+      "has_attachments": false,
+      "tags": [],
+      "is_spam_verdict": false
+    }
+  ],
+  "total": 3,
+  "folder": "INBOX",
+  "offset": 2,
+  "sync": {
+    "source": "memory_cache",
+    "indexed": 1,
+    "updated_at": "2026-10-07T18:00:00Z"
+  }
+}

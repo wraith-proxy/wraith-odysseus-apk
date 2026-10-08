@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- The only permission. No notifications, no storage: attachments come
+         through the system Photo Picker and document picker, which need
+         none. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- usesCleartextTraffic is on so a server on a home LAN or a Tailscale
+         100.x address can be reached over plain http. It is not a blanket
+         allowance: net/HostPolicy.kt refuses http for any public host at the
+         moment the URL is entered, so the cookie never crosses the internet
+         unencrypted. allowBackup is off and there are no dataExtractionRules
+         on purpose: the session cookie is sealed with a Keystore key that
+         never leaves the device, so a restored copy would be useless. -->
+    <application
+        android:name=".WraithOdysseusApp"
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:theme="@style/Theme.WraithOdysseus"
+        android:usesCleartextTraffic="true"
+        android:supportsRtl="true">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+    </application>
+</manifest>

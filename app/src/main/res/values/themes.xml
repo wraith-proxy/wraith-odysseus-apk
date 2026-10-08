@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Pure Compose UI: everything real happens in ui/theme/Theme.kt. This
+         XML theme exists only so the manifest has a valid android:theme before
+         Compose runs, and so the launch frame is the app's own background
+         rather than a white flash. Dark only, so no night variant. -->
+    <style name="Theme.WraithOdysseus" parent="android:Theme.DeviceDefault.NoActionBar">
+        <item name="android:windowBackground">#282C34</item>
+    </style>
+</resources>

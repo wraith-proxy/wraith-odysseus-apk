@@ -1,0 +1,12 @@
+data: {"type": "model_info", "model": "qwen3-30b-a3b", "endpoint_id": "ep_local01", "endpoint_label": "Local llama"}
+
+data: {"delta": "<think>Count the letters"}
+
+data: {"delta": " in banana.</think>"}
+
+data: {"delta": "There are **three** a's."}
+
+data: {"type": "message_saved", "id": "m-0101"}
+
+data: [DONE]
+

@@ -1,0 +1,9 @@
+data: {"type": "model_info", "model": "qwen3-30b-a3b", "endpoint_id": "ep_local01", "endpoint_label": "Local llama"}
+
+data: {"delta": "Partial"}
+
+event: error
+data: {"error": "Cannot reach llm.example.internal:8080", "status": 503}
+
+data: [DONE]
+

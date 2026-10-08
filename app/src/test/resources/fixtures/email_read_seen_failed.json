@@ -1,0 +1,17 @@
+{
+  "uid": "1042",
+  "folder": "INBOX",
+  "message_id": "<a1@example.com>",
+  "subject": "Dinner on Friday?",
+  "from_name": "Carol Sample",
+  "from_address": "carol@example.com",
+  "to": "alice@example.com",
+  "cc": "",
+  "date": "2026-10-07T17:30:00+00:00",
+  "in_reply_to": "",
+  "references": "",
+  "body": "Short body",
+  "body_html": "",
+  "attachments": [],
+  "mark_seen_failed": true
+}

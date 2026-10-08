@@ -1,0 +1,4 @@
+data: {"type": "tool_approval_resolved", "decision": "deny"}
+
+data: [DONE]
+
