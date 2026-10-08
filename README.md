@@ -22,14 +22,20 @@ on merge to `main`. The APK is `wraith-odysseus.apk` on the
 [Releases](https://git.thomaspeoples.com/thomaspeoples/wraith-odysseus-apk/releases)
 page, tagged `android-X.Y.Z`.
 
-- **Obtainium:** point it at this repo's URL and tell it the host is Gitea. It
-  tracks releases automatically.
+- **Obtainium:** point it at this repo's URL and tell it the host is Gitea, or
+  open the one-tap preset link in
+  [docs/android-distribution.md](docs/android-distribution.md#one-tap-obtainium-preset)
+  on the phone. It tracks releases automatically.
 - **Direct sideload:** download the APK from Releases and open it. The app also
   checks for a newer release itself on launch.
-- **F-Droid:** not yet. See [docs/ROADMAP.md](docs/ROADMAP.md).
+- **F-Droid:** not yet. A recipe draft is in
+  [docs/fdroid/](docs/fdroid/com.thomaspeoples.wraithodysseus.yml); see
+  [docs/ROADMAP.md](docs/ROADMAP.md).
 
 Then enter your server's address and log in with your Odysseus username,
-password and (if enabled) 2FA code.
+password and (if enabled) 2FA code. The app needs to reach the server the same
+way your browser does: on a tailnet, that means Tailscale connected on the
+phone.
 
 ## 🗺️ What it does
 
@@ -47,6 +53,11 @@ your Odysseus server  (stock 1.0.3, cookie session, no server changes)
   |   read, mark unread, send, reply                         |
   +-----------------------------------------------------------+
 ```
+
+Two tabs, Chats and Email, with About, FAQ and Log out in the overflow menu.
+If the server ends the session early, the login screen opens over whatever
+you were doing and returns you there once you log in again as the same
+account.
 
 ## 🧩 The Hard Decisions Baked In
 
@@ -67,6 +78,17 @@ commitizen rewrites, so it cannot be forgotten on a bump.
 **No Google anything.** No Play Services, no Firebase, no downloadable fonts.
 Fira Code is bundled. The only permission is `INTERNET`.
 
+**A dropped stream is replayed, never appended.** The server replays a run
+from its start on resume, so the app throws away the half-built reply and
+rebuilds it from the replay. Screen-off, app switches and flaky Wi-Fi cost
+nothing and never double the text.
+
+**Email errors are read from the body.** The server answers many email
+failures with HTTP 200 and an `error` field, and a slow send with a 504 even
+when the mail may still go out. The first is turned into a real error; the
+second is reported as "unconfirmed" and never retried, so nothing is sent
+twice.
+
 ## 🛠️ Building
 
 ```bash
@@ -74,7 +96,7 @@ git clone https://git.thomaspeoples.com/thomaspeoples/wraith-odysseus-apk.git
 cd wraith-odysseus-apk
 
 cp local.properties.example local.properties   # set sdk.dir
-./gradlew assembleDebug
+./gradlew testDebugUnitTest lintDebug assembleDebug
 ```
 
 There is no server URL in the build: it is typed into the app. Set

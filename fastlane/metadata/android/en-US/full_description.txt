@@ -1,0 +1,41 @@
+Wraith for Odysseus puts your own self-hosted Odysseus AI server on your
+phone: your chats, and every unread email across your accounts.
+
+Unofficial, not affiliated with the Odysseus project.
+
+Requires your own Odysseus server (tested with 1.0.3). The app talks to it
+over the same routes its web UI uses, so the server needs no changes.
+
+Chats:
+* every chat session, with search and new chats
+* streaming replies, with the model's thinking shown separately
+* model picker, and agent, web and research modes
+* approve or deny tool calls; a Terminal toggle for accounts allowed to use it
+* photo and file attachments
+* stop a reply, or switch away and come back: a running reply is picked up
+  again from the server without doubled text
+
+Email:
+* every unread message in the inbox of every enabled account, merged and
+  newest first
+* read as plain text, mark unread, send and reply
+
+You log in with your Odysseus username, password and 2FA code, just as in the
+web UI. Only the resulting session cookie is stored, encrypted with a key that
+never leaves the device. Your password is never stored.
+
+Cleartext traffic: plain http is allowed only for private network addresses
+(a home LAN or a Tailscale 100.x address), and refused for any public host or
+hostname, so your session never crosses the internet unencrypted. A server
+that requires https always gets https.
+
+Update check: builds downloaded from this project's releases check its Gitea
+releases page once per launch and offer a link when a newer version exists.
+Nothing about you or your server is sent. F-Droid builds have this check
+compiled out and contact nothing but your own server.
+
+No analytics, no tracking, no Google Play Services. The only permission is
+Internet access.
+
+Not distributed via Google Play. Install it from this project's Gitea
+releases, or track them with Obtainium.

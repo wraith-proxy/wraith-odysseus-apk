@@ -8,8 +8,8 @@ changes. Not affiliated with the Odysseus project.
 
 ## What it does
 
-Status: the bootstrap is done and the features below are landing one by one;
-[the roadmap](ROADMAP.md) has the checklist.
+Status: feature-complete for 0.1.0 and waiting on the first release and a
+run through the device checklist; [the roadmap](ROADMAP.md) has the details.
 
 - **Chats.** The session list, history with "load older", and streaming
   replies with the model's thinking shown separately. There is a model picker,
@@ -18,6 +18,8 @@ Status: the bootstrap is done and the features below are landing one by one;
   it from the server's replay.
 - **Email.** Every unread message across every enabled account, merged and
   sorted. You can read a message (as text), mark it unread, send, and reply.
+- **The rest.** About (version, licences, the update-check disclosure), an
+  FAQ, log out, and a dialog when a newer release exists.
 
 ## Scope, stated plainly
 
@@ -25,7 +27,9 @@ Status: the bootstrap is done and the features below are landing one by one;
 - Login is the web UI's own: username, password, optional TOTP. Only the
   resulting session cookie is kept, encrypted with a Keystore key.
 - The session lasts the server's fixed 7 days from login, then the app asks
-  you to log in again.
+  you to log in again. If the server ends it early, the app shows the login
+  screen over whatever was open and goes back there once you log in again as
+  the same account.
 
 See [distribution](android-distribution.md) for how to install it, and
 [the roadmap](ROADMAP.md) for what comes next.

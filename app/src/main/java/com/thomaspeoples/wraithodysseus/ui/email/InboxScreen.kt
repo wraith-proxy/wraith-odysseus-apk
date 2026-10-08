@@ -132,7 +132,7 @@ class InboxViewModel(private val api: EmailApi) : ViewModel() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun InboxScreen(api: EmailApi, onOpen: (EmailSummary) -> Unit, onCompose: () -> Unit) {
+fun InboxScreen(api: EmailApi, onOpen: (EmailSummary) -> Unit, onCompose: () -> Unit, menu: @Composable () -> Unit = {}) {
     val vm = viewModel { InboxViewModel(api) }
     val state = vm.state
     // Labels only help when there is more than one mailbox in the list.
@@ -151,6 +151,7 @@ fun InboxScreen(api: EmailApi, onOpen: (EmailSummary) -> Unit, onCompose: () -> 
                     IconButton(onClick = onCompose) {
                         Icon(Icons.Filled.Create, contentDescription = "Compose")
                     }
+                    menu()
                 },
             )
         },

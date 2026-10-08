@@ -48,10 +48,11 @@ import java.time.format.FormatStyle
 import kotlinx.coroutines.launch
 
 /** The Chats tab: every session, newest first (important ones pinned on top
- * by the server), refreshed on pull-down and whenever the screen resumes. */
+ * by the server), refreshed on pull-down and whenever the screen resumes.
+ * [menu] is the app shell's overflow menu, drawn at the end of the header. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SessionsScreen(api: ChatApi, onOpen: (String) -> Unit, onSearch: () -> Unit) {
+fun SessionsScreen(api: ChatApi, onOpen: (String) -> Unit, onSearch: () -> Unit, menu: @Composable () -> Unit = {}) {
     val scope = rememberCoroutineScope()
     var sessions by remember { mutableStateOf<List<ChatSession>?>(null) }
     var refreshing by remember { mutableStateOf(false) }
@@ -100,6 +101,7 @@ fun SessionsScreen(api: ChatApi, onOpen: (String) -> Unit, onSearch: () -> Unit)
             Text("Chats", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
             IconButton(onClick = onSearch) { Icon(Icons.Default.Search, "Search") }
             IconButton(onClick = { newChat() }, enabled = !creating) { Icon(Icons.Default.Add, "New chat") }
+            menu()
         }
         error?.let {
             Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp))

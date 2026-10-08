@@ -1,0 +1,1 @@
+Unofficial Android client for your self-hosted Odysseus AI server

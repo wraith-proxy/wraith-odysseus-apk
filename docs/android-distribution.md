@@ -16,6 +16,30 @@ which `cz bump`s the version, tags `android-X.Y.Z`, builds a signed
   `android-(\d+\.\d+\.\d+)`.
 - Anyone can also download `wraith-odysseus.apk` from the Releases page.
 
+### One-tap Obtainium preset
+
+On the phone, with Obtainium installed, open this link to add the app with
+the settings above already filled in:
+
+[Add to Obtainium](obtainium://app/%7B%22id%22%3A%22com.thomaspeoples.wraithodysseus%22%2C%22url%22%3A%22https%3A%2F%2Fgit.thomaspeoples.com%2Fthomaspeoples%2Fwraith-odysseus-apk%22%2C%22author%22%3A%22thomaspeoples%22%2C%22name%22%3A%22Wraith%20for%20Odysseus%22%2C%22preferredApkIndex%22%3A0%2C%22additionalSettings%22%3A%22%7B%5C%22apkFilterRegEx%5C%22%3A%5C%22%5Ewraith-odysseus%5C%5C%5C%5C.apk%24%5C%22%2C%5C%22versionExtractionRegEx%5C%22%3A%5C%22android-%28%5C%5C%5C%5Cd%2B%5C%5C%5C%5C.%5C%5C%5C%5Cd%2B%5C%5C%5C%5C.%5C%5C%5C%5Cd%2B%29%5C%22%2C%5C%22matchGroupToUse%5C%22%3A%5C%221%5C%22%2C%5C%22includePrereleases%5C%22%3Afalse%7D%22%2C%22overrideSource%22%3A%22Codeberg%22%7D)
+
+It is an `obtainium://app/{json}` link. The JSON it carries, before URL
+encoding:
+
+```json
+{"id":"com.thomaspeoples.wraithodysseus",
+ "url":"https://git.thomaspeoples.com/thomaspeoples/wraith-odysseus-apk",
+ "author":"thomaspeoples","name":"Wraith for Odysseus","preferredApkIndex":0,
+ "additionalSettings":"{\"apkFilterRegEx\":\"^wraith-odysseus\\\\.apk$\",\"versionExtractionRegEx\":\"android-(\\\\d+\\\\.\\\\d+\\\\.\\\\d+)\",\"matchGroupToUse\":\"1\",\"includePrereleases\":false}",
+ "overrideSource":"Codeberg"}
+```
+
+`overrideSource` is Obtainium's Forgejo/Gitea source (named after Codeberg),
+which is what a self-hosted Gitea needs. The preset has not yet been tried on a
+device; the first install through it is part of the device checklist, and the
+thing to confirm there is that Obtainium reports the app as up to date rather
+than offering a false update.
+
 The repo must be public for any of this, including the in-app update check, to
 reach it.
 
@@ -30,9 +54,23 @@ makes to anything other than your own server. Build with `updateCheck=false`
 ## F-Droid
 
 Not submitted yet. Already in place: no proprietary dependencies, `INTERNET` as
-the only permission, a checksummed Gradle wrapper, no AGP dependency-info block
-(`release.yml` fails if one appears), and the `UPDATE_CHECK` switch. Deferred:
-reproducible builds and an fdroiddata recipe. See [the roadmap](ROADMAP.md).
+the only permission (the merged manifest also carries AndroidX's own
+signature-level `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`, which every
+AndroidX app has and which grants nothing), a checksummed Gradle wrapper, no
+AGP dependency-info block (`release.yml` fails if one appears), and the
+`UPDATE_CHECK` switch.
+
+A draft fdroiddata recipe is in
+[`docs/fdroid/com.thomaspeoples.wraithodysseus.yml`](https://git.thomaspeoples.com/thomaspeoples/wraith-odysseus-apk/src/branch/main/docs/fdroid/com.thomaspeoples.wraithodysseus.yml).
+It builds the tag with `updateCheck=false`, so an F-Droid build never contacts
+anything but the user's own server. It has not been through `fdroid lint` or
+`fdroid build` yet. Automatic update detection, reproducible builds and
+`AllowedAPKSigningKeys` are left out of it on purpose; see
+[the roadmap](ROADMAP.md).
+
+An F-Droid build is signed with F-Droid's key, not this project's, so it cannot
+be installed over a copy from Obtainium or Releases (or the other way round)
+without uninstalling first, which also logs you out.
 
 ## Signing key
 
