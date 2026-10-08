@@ -42,11 +42,17 @@ class RunFollower(
      * the stream end that follows is the run ending, not a drop to resume. */
     @Volatile var stopping = false
 
+    /** Set once the server has accepted the stop. A connection that drops
+     * while the stop is still being asked for is only a drop: the stop
+     * request may well have failed with it. */
+    @Volatile var stopped = false
+
     suspend fun follow(first: RunStream): RunEnd {
         var stream = first
         while (true) {
             runId = stream.runId
             state.value = TurnState()
+            var dropped = false
             try {
                 val done = stream.events
                     .onEach { e -> state.update { it.apply(e) } }
@@ -54,8 +60,9 @@ class RunFollower(
                 if (done != null) return RunEnd.Done
             } catch (_: IOException) {
                 // Dropped mid-run; fall through to resume.
+                dropped = true
             }
-            if (stopping) return RunEnd.Stopped
+            if (if (dropped) stopped else stopping) return RunEnd.Stopped
             // A stream that just ends without [DONE] is a drop too.
             stream = reconnect() ?: return RunEnd.Gone
         }

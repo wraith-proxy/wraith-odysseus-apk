@@ -86,6 +86,26 @@ class RunFollowerTest {
     }
 
     @Test
+    fun aDropWhileTheStopIsStillUnansweredIsADrop() = runBlocking {
+        server.enqueue(dropped())
+        server.enqueue(sse(fixture("sse_resume_replay_heartbeat.txt"), "run-1"))
+        val f = follower()
+        f.stopping = true
+        assertEquals(RunEnd.Done, withTimeout(10_000) { f.follow(send()) })
+        assertEquals(2, server.requestCount)
+    }
+
+    @Test
+    fun aDropAfterTheStopWasAcceptedIsTheEnd() = runBlocking {
+        server.enqueue(dropped())
+        val f = follower()
+        f.stopping = true
+        f.stopped = true
+        assertEquals(RunEnd.Stopped, withTimeout(10_000) { f.follow(send()) })
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
     fun resume404EndsTheRun() = runBlocking {
         server.enqueue(dropped())
         server.enqueue(MockResponse().setResponseCode(404).setBody(fixture("chat_resume_404.json")))

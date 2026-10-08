@@ -129,6 +129,14 @@ class EmailApiTest {
     }
 
     @Test
+    fun aMalformedEntryFailsTheCallInsteadOfCrashing() = runBlocking {
+        server.enqueue(MockResponse().setBody("""{"accounts":[{"name":"Home"}]}"""))
+        assertEquals("Unexpected response", errorOf { api.accounts() })
+        server.enqueue(MockResponse().setBody("""{"emails":["not an object"],"total":1}"""))
+        assertEquals("Unexpected response", errorOf { api.unreadPage("acc-home", 0) })
+    }
+
+    @Test
     fun aForeignAccountIs404() = runBlocking {
         reply("email_account_404.json", 404)
         assertEquals("Account not found", errorOf { api.unreadPage("acc-other", 0) })

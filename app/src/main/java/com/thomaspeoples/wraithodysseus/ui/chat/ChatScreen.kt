@@ -44,7 +44,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -74,7 +73,6 @@ import com.thomaspeoples.wraithodysseus.ui.theme.OdyColors
 import com.thomaspeoples.wraithodysseus.ui.theme.SheetShape
 import com.thomaspeoples.wraithodysseus.ui.theme.UserBubbleShape
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /** The chat/{sid} route. [canUseBash] is privileges.can_use_bash from
@@ -83,7 +81,6 @@ import kotlinx.coroutines.withContext
 fun ChatScreen(api: ChatApi, sessionId: String, canUseBash: Boolean, onBack: () -> Unit) {
     val vm = viewModel(key = sessionId) { ChatViewModel(api, sessionId, createSavedStateHandle()) }
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
 
     // Covers screen-off and app switches: a run that dropped (or was started
     // elsewhere) is picked up again, replayed from its start.
@@ -132,8 +129,7 @@ fun ChatScreen(api: ChatApi, sessionId: String, canUseBash: Boolean, onBack: () 
             showTerminal = canUseBash,
             attachments = vm.attachments,
             uploading = vm.uploading,
-            onPicked = { uri -> scope.launch { readUri(context, uri)?.let { (name, mime, bytes) -> vm.attachFile(name, mime, bytes) }
-                    ?: run { vm.error = "Could not read that file" } } },
+            onPicked = { uri -> context.applicationContext.let { app -> vm.attachFile { readUri(app, uri) } } },
             onRemoveAttachment = vm::removeAttachment,
             running = vm.running,
             canStop = vm.canStop,

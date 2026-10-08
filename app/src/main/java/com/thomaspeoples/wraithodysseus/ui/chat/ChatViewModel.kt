@@ -102,18 +102,20 @@ class ChatViewModel(
     }
 
     /** One load at a time. The limit stops the page exactly where the shown
-     * rows begin (the last page need not start on a multiple of 50), and
-     * anything already shown is dropped anyway: a reload that lands mid-load
-     * moves the offset, and a repeated dbId would crash the list. */
+     * rows begin (the last page need not start on a multiple of 50). A
+     * reload that lands mid-load moves where the shown rows begin, and the
+     * page then no longer joins up with them: it is dropped, and the next
+     * tap loads from the new start. */
     fun loadOlder() {
         if (!hasOlder || loadingOlder) return
         loadingOlder = true
         viewModelScope.launch {
             report {
-                val from = maxOf(offset - ChatApi.PAGE, 0)
-                val page = api.history(sessionId, from, offset - from)
-                val shown = messages.mapNotNullTo(HashSet()) { it.dbId }
-                messages = page.messages.filter { it.dbId !in shown } + messages
+                val until = offset
+                val from = maxOf(until - ChatApi.PAGE, 0)
+                val page = api.history(sessionId, from, until - from)
+                if (offset != until) return@report
+                messages = page.messages + messages
                 offset = page.offset
                 hasOlder = page.hasMoreBefore
             }
@@ -127,10 +129,18 @@ class ChatViewModel(
         val sent = attachments
         // Sending a normal message retires any pending approval server-side.
         ask = null
-        messages = messages + HistoryMessage("user", text, null, null, sent)
+        val bubble = HistoryMessage("user", text, null, null, sent)
+        messages = messages + bubble
         draft = ""
         attachments = emptyList()
-        start { api.chatStream(request(text, sent.map { it.id }, null)) }
+        // Refused before the stream opened (quota, model, a dropped
+        // connection): the server saved nothing, so the message goes back
+        // into the composer instead of vanishing with a reload.
+        start(rejected = {
+            messages = messages - bubble
+            if (draft.isBlank()) draft = text
+            attachments = sent + attachments
+        }) { api.chatStream(request(text, sent.map { it.id }, null)) }
     }
 
     /** A plain ask_user answer: the picked labels, sent as a message. */
@@ -159,12 +169,22 @@ class ChatViewModel(
         f.stopping = true
         var stopped = false
         report { stopped = api.stop(sessionId, runId) }
+        f.stopped = stopped
         f.stopping = stopped
     }
 
-    fun attachFile(name: String, mime: String, bytes: ByteArray) = viewModelScope.launch {
+    /** [read] gives the picked file's name, type and bytes, or null if it
+     * cannot be read. It runs here rather than in the screen's scope, so a
+     * rotation mid-read does not drop the file; it must not hold the Activity. */
+    fun attachFile(read: suspend () -> Triple<String, String, ByteArray>?) = viewModelScope.launch {
         uploading = true
-        report { attachments = attachments + api.upload(name, mime, bytes) }
+        report {
+            val (name, mime, bytes) = read() ?: run {
+                error = "Could not read that file"
+                return@report
+            }
+            attachments = attachments + api.upload(name, mime, bytes)
+        }
         uploading = false
     }
 
@@ -183,14 +203,17 @@ class ChatViewModel(
         approval = approval,
     )
 
-    private fun start(expiredOn409: Boolean = false, open: suspend () -> RunStream?) {
+    /** [rejected], if given, runs instead of the history reload when [open]
+     * itself fails, i.e. no stream was ever opened. */
+    private fun start(expiredOn409: Boolean = false, rejected: (() -> Unit)? = null, open: suspend () -> RunStream?) {
         running = true
         error = null
         viewModelScope.launch {
             val f = RunFollower(api, sessionId).also { follower = it }
             val mirror = launch { f.turn.collect { live = it } }
+            var opened = false
             val end = try {
-                open()?.let { stream ->
+                open().also { opened = true }?.let { stream ->
                     canStop = stream.runId != null
                     f.follow(stream)
                 }
@@ -206,7 +229,7 @@ class ChatViewModel(
             if (end != null) {
                 ask = last.ask
                 error = (end as? RunEnd.Failed)?.message ?: last.error
-                reloadHistory()
+                if (!opened && rejected != null) rejected() else reloadHistory()
             }
             live = null
             running = false

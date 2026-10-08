@@ -1,6 +1,7 @@
 package com.thomaspeoples.wraithodysseus.ui.email
 
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -57,8 +58,8 @@ import kotlinx.coroutines.launch
 
 /**
  * A new message, or with [reply] set, a reply to it from [replyAccountId].
- * [onDone] is called on Sent and on back; on any other outcome the draft
- * stays on screen. Nothing is ever re-sent automatically: after an
+ * [onDone] is called on Sent and on back, which is held off while a send
+ * is in flight; on any other outcome the draft stays on screen. Nothing is ever re-sent automatically: after an
  * unconfirmed send a second tap could deliver the message twice.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -82,6 +83,10 @@ fun ComposeScreen(api: EmailApi, onDone: () -> Unit, reply: EmailMessage? = null
     var unconfirmed by rememberSaveable { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+
+    // Back waits for the send: leaving would cancel it (and with it the
+    // outcome and the draft) while it may already have reached the server.
+    BackHandler(enabled = sending) { }
 
     LaunchedEffect(Unit) {
         if (sending) {
@@ -132,7 +137,7 @@ fun ComposeScreen(api: EmailApi, onDone: () -> Unit, reply: EmailMessage? = null
                 title = { Text(if (draft != null) "Reply" else "New message") },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                 navigationIcon = {
-                    IconButton(onClick = onDone) {
+                    IconButton(onClick = onDone, enabled = !sending) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },

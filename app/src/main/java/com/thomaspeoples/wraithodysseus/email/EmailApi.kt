@@ -10,6 +10,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
+import org.json.JSONException
 import org.json.JSONObject
 
 /** An item of GET /api/email/accounts (wrapped in {"accounts": [...]}). */
@@ -85,8 +86,7 @@ class EmailApi(private val http: Http, private val sendTimeoutSeconds: Long = Ht
     suspend fun accounts(): List<EmailAccount> {
         val list = checkBody(http.call(get(http.url("/api/email/accounts")))).optJSONArray("accounts")
             ?: return emptyList()
-        return (0 until list.length()).map { i ->
-            val o = list.getJSONObject(i)
+        return parseEach(list) { o ->
             EmailAccount(
                 id = o.getString("id"),
                 name = o.optString("name"),
@@ -108,8 +108,7 @@ class EmailApi(private val http: Http, private val sendTimeoutSeconds: Long = Ht
         val json = checkBody(http.call(get(url)))
         val items = json.optJSONArray("emails") ?: JSONArray()
         val folder = json.optString("folder", INBOX)
-        val emails = (0 until items.length()).map { i ->
-            val o = items.getJSONObject(i)
+        val emails = parseEach(items) { o ->
             EmailSummary(
                 accountId = accountId,
                 folder = folder,
@@ -206,6 +205,15 @@ class EmailApi(private val http: Http, private val sendTimeoutSeconds: Long = Ht
             if (error != null) throw ApiException(200, error)
             if (json.opt("success") == false) throw ApiException(200, "Request failed")
             return json
+        }
+
+        /** Each entry through [item]. An entry that is not an object, or
+         * lacks a required key, fails the call as checkBody would, rather
+         * than escaping as a JSONException no caller catches. */
+        private fun <T> parseEach(list: JSONArray, item: (JSONObject) -> T): List<T> = try {
+            (0 until list.length()).map { item(list.getJSONObject(it)) }
+        } catch (_: JSONException) {
+            throw ApiException(200, "Unexpected response")
         }
 
         internal fun sendJson(r: SendRequest): JSONObject = JSONObject().apply {

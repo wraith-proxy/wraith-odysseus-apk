@@ -11,7 +11,10 @@ import com.thomaspeoples.wraithodysseus.net.Http
 import com.thomaspeoples.wraithodysseus.net.SessionCookie
 import com.thomaspeoples.wraithodysseus.net.SessionState
 import java.util.Collections
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.job
 import kotlinx.coroutines.runBlocking
 import okhttp3.HttpUrl
@@ -36,16 +39,33 @@ class ChatViewModelTest {
     private val server = MockWebServer()
     private val historyPaths: MutableList<String> = Collections.synchronizedList(mutableListOf())
 
-    /** The server's own paging over [TOTAL] rows: no offset means the last
+    /** Rows in the session; a finished run adds to it. */
+    @Volatile private var total = 80
+    /** What POST /api/chat_stream answers. */
+    @Volatile private var chatStream = MockResponse().setResponseCode(500)
+    /** Held shut, an older-page request waits on it. */
+    @Volatile private var olderGate = CountDownLatch(0)
+
+    private fun fixture(name: String) =
+        checkNotNull(javaClass.classLoader?.getResource("fixtures/$name")) { name }.readText()
+
+    /** The server's own paging over [total] rows: no offset means the last
      * page, and a page is rows [offset, offset + limit). */
     private val odysseus = object : Dispatcher() {
         override fun dispatch(request: RecordedRequest): MockResponse {
             val url = checkNotNull(request.requestUrl)
-            if (url.encodedPath == "/api/models") return MockResponse().setBody("""{"items":[]}""")
+            when (url.encodedPath) {
+                "/api/models" -> return MockResponse().setBody("""{"items":[]}""")
+                "/api/upload" -> return MockResponse().setBody(fixture("upload.json"))
+                "/api/chat_stream" -> return chatStream
+            }
             historyPaths += checkNotNull(request.path)
             val limit = url.queryParameter("limit")!!.toInt()
-            val offset = url.queryParameter("offset")?.toInt() ?: maxOf(TOTAL - limit, 0)
-            val rows = (offset until minOf(offset + limit, TOTAL)).map { i ->
+            val asked = url.queryParameter("offset")?.toInt()
+            if (asked != null) olderGate.await(10, TimeUnit.SECONDS)
+            val total = total
+            val offset = asked ?: maxOf(total - limit, 0)
+            val rows = (offset until minOf(offset + limit, total)).map { i ->
                 JSONObject()
                     .put("role", if (i % 2 == 0) "user" else "assistant")
                     .put("content", "message $i")
@@ -54,7 +74,7 @@ class ChatViewModelTest {
             val body = JSONObject()
                 .put("history", JSONArray(rows))
                 .put("offset", offset)
-                .put("total", TOTAL)
+                .put("total", total)
                 .put("has_more_before", offset > 0)
             return MockResponse().setBody(body.toString())
         }
@@ -96,6 +116,66 @@ class ChatViewModelTest {
         assertEquals(listOf("/api/history/s1?limit=50", "/api/history/s1?limit=30&offset=0"), historyPaths)
     }
 
+    @Test
+    fun aReloadDuringLoadOlderLeavesNoGap() = runBlocking {
+        val vm = vm()
+        settle()
+        olderGate = CountDownLatch(1)
+        vm.loadOlder() // asks for rows 0..29, and waits
+        // Meanwhile a run saves two rows and its end reloads the last page.
+        total = 82
+        chatStream = MockResponse().setHeader("Content-Type", "text/event-stream")
+            .setHeader("X-Odysseus-Run-Id", "run-1").setBody(fixture("sse_chat_basic.txt"))
+        vm.draft = "hi"
+        vm.send()
+        while (vm.running) delay(10)
+        assertEquals((32 until 82).map { "m-$it" }, vm.messages.map { it.dbId })
+        olderGate.countDown()
+        settle()
+
+        // The stale page is not glued on in front of rows 30 and 31's gap.
+        assertEquals((32 until 82).map { "m-$it" }, vm.messages.map { it.dbId })
+        vm.loadOlder()
+        settle()
+        assertEquals((0 until 82).map { "m-$it" }, vm.messages.map { it.dbId })
+    }
+
+    @Test
+    fun aSendRefusedBeforeTheStreamOpensGoesBackIntoTheComposer() = runBlocking {
+        val vm = vm()
+        settle()
+        chatStream = MockResponse().setResponseCode(429).setBody(fixture("chat_stream_429_quota.json"))
+        vm.attachFile { Triple("cat.png", "image/png", ByteArray(4)) }
+        settle()
+        val files = vm.attachments
+        assertEquals(listOf("f-9a8b7c6d5e4f"), files.map { it.id })
+        val shown = vm.messages
+        val reloads = historyPaths.size
+
+        vm.draft = "  hello  "
+        vm.send()
+        assertEquals("", vm.draft)
+        settle()
+
+        assertEquals("Daily message limit reached (50). Try again in 24 hours.", vm.error)
+        assertEquals("hello", vm.draft)
+        assertEquals(files, vm.attachments)
+        assertEquals(shown, vm.messages)
+        assertEquals(reloads, historyPaths.size)
+        assertFalse(vm.running)
+    }
+
+    @Test
+    fun anUnreadableFileIsReportedNotDropped() = runBlocking {
+        val vm = vm()
+        settle()
+        vm.attachFile { null }
+        settle()
+        assertEquals("Could not read that file", vm.error)
+        assertEquals(emptyList<UploadedFile>(), vm.attachments)
+        assertFalse(vm.uploading)
+    }
+
     /** Null when nothing was saved, which brings back the default on restore. */
     private fun <T> roundTrip(saver: Saver<T, Any>, value: T): T? =
         with(saver) { SaverScope { true }.save(value) }?.let(saver::restore)
@@ -112,9 +192,5 @@ class ChatViewModelTest {
         val files = listOf(UploadedFile("f-1", "cat.png", "image/png"), UploadedFile("f-2", "notes.txt", "text/plain"))
         assertEquals(files, roundTrip(ChatViewModel.FilesSaver, files))
         assertNull(roundTrip(ChatViewModel.FilesSaver, emptyList()))
-    }
-
-    private companion object {
-        const val TOTAL = 80
     }
 }
