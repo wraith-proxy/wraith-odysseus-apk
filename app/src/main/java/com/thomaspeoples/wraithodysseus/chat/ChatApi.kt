@@ -41,7 +41,8 @@ data class HistoryMessage(
 )
 
 /** GET /api/history/{sid}?limit=50[&offset]. No offset means the last page;
- * older pages are at max(offset - 50, 0) while [hasMoreBefore]. */
+ * the server returns rows [offset, offset + limit), so an older page is
+ * max(offset - 50, 0) with a limit that stops where the shown rows begin. */
 data class HistoryPage(
     val messages: List<HistoryMessage>,
     val offset: Int,
@@ -118,9 +119,9 @@ class ChatApi(private val http: Http) {
         return JSONObject(http.call(post("/api/session", body))).getString("id")
     }
 
-    suspend fun history(sessionId: String, offset: Int?): HistoryPage {
+    suspend fun history(sessionId: String, offset: Int?, limit: Int = PAGE): HistoryPage {
         val url = http.url("/api/history/${seg(sessionId)}").newBuilder()
-            .addQueryParameter("limit", PAGE.toString())
+            .addQueryParameter("limit", limit.toString())
             .apply { if (offset != null) addQueryParameter("offset", offset.toString()) }
             .build()
         return parseHistory(JSONObject(http.call(Request.Builder().url(url).build())))
@@ -279,9 +280,12 @@ class ChatApi(private val http: Http) {
                         content = split.answer,
                         dbId = meta?.str("_db_id"),
                         thinking = thinking,
+                        // An entry without an id cannot be fetched; it is skipped
+                        // rather than failing the whole page.
                         attachments = meta?.optJSONArray("attachments")?.let { a ->
-                            (0 until a.length()).map(a::getJSONObject).map {
-                                UploadedFile(it.getString("id"), it.str("name").orEmpty(), it.str("mime").orEmpty())
+                            (0 until a.length()).mapNotNull { a.optJSONObject(it) }.mapNotNull {
+                                val id = it.str("id") ?: return@mapNotNull null
+                                UploadedFile(id, it.str("name").orEmpty(), it.str("mime").orEmpty())
                             }
                         } ?: emptyList(),
                     )

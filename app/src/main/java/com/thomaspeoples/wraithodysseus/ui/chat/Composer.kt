@@ -49,7 +49,8 @@ import com.thomaspeoples.wraithodysseus.ui.theme.OdyColors
 import com.thomaspeoples.wraithodysseus.ui.theme.SendButtonShape
 
 /** The bottom of a chat: capability chips, pending attachments, and the
- * input bar whose send button turns into Stop while a run is live. */
+ * input bar whose send button turns into Stop while a run is live. Stop
+ * stays greyed until [canStop]: before the run id arrives a tap would be lost. */
 @Composable
 fun Composer(
     draft: String,
@@ -62,6 +63,7 @@ fun Composer(
     onPicked: (Uri) -> Unit,
     onRemoveAttachment: (UploadedFile) -> Unit,
     running: Boolean,
+    canStop: Boolean,
     onSend: () -> Unit,
     onStop: () -> Unit,
     modifier: Modifier = Modifier,
@@ -133,8 +135,8 @@ fun Composer(
                 modifier = Modifier.weight(1f),
             )
             if (running) {
-                TextButton(onClick = onStop, modifier = Modifier.padding(end = 4.dp)) {
-                    Text("Stop", color = MaterialTheme.colorScheme.error)
+                TextButton(onClick = onStop, enabled = canStop, modifier = Modifier.padding(end = 4.dp)) {
+                    Text("Stop", color = if (canStop) MaterialTheme.colorScheme.error else Muted)
                 }
             } else {
                 IconButton(

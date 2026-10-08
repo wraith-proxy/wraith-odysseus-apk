@@ -4,8 +4,10 @@ import com.thomaspeoples.wraithodysseus.net.ApiException
 import com.thomaspeoples.wraithodysseus.net.Http
 import com.thomaspeoples.wraithodysseus.net.SessionCookie
 import com.thomaspeoples.wraithodysseus.net.SessionState
+import java.net.ServerSocket
 import kotlinx.coroutines.runBlocking
 import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.SocketPolicy
@@ -217,6 +219,23 @@ class EmailApiTest {
         server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.NO_RESPONSE))
         assertEquals(SendResult.Unconfirmed, api.send(message))
         assertEquals(1, server.requestCount)
+    }
+
+    @Test
+    fun aConnectionCutAfterTheBodyIsUnconfirmed() = runBlocking {
+        server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AFTER_REQUEST))
+        assertEquals(SendResult.Unconfirmed, api.send(message))
+        // And never re-sent behind the user's back.
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
+    fun noServerToConnectToFailsRatherThanCrashing() = runBlocking {
+        // A port that was free a moment ago: the connect is refused.
+        val port = ServerSocket(0).use { it.localPort }
+        val origin = "http://127.0.0.1:$port/".toHttpUrl()
+        val offline = EmailApi(Http(FakeSession(origin, SessionCookie("abc123", Long.MAX_VALUE, secure = false))))
+        assertEquals(SendResult.Failed("Could not reach the server"), offline.send(message))
     }
 
     @Test

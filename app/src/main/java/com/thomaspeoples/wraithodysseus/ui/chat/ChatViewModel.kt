@@ -2,9 +2,14 @@ package com.thomaspeoples.wraithodysseus.ui.chat
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.autoSaver
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.compose.SavedStateHandleSaveableApi
+import androidx.lifecycle.viewmodel.compose.saveable
 import com.thomaspeoples.wraithodysseus.chat.AskOption
 import com.thomaspeoples.wraithodysseus.chat.AskUser
 import com.thomaspeoples.wraithodysseus.chat.ChatApi
@@ -20,13 +25,28 @@ import com.thomaspeoples.wraithodysseus.chat.TurnState
 import com.thomaspeoples.wraithodysseus.chat.UploadedFile
 import com.thomaspeoples.wraithodysseus.net.ApiException
 import java.io.IOException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import org.json.JSONException
 
 /**
  * One open chat. Lives across rotation; leaving the screen only detaches --
- * the run carries on server-side and is picked up again by [attach].
+ * the run carries on server-side and is picked up again by [attach]. What
+ * the user has typed, picked and uploaded is in [saved], so it also survives
+ * the process being killed behind the document picker.
+ *
+ * [scope] is a constructor argument only so a JVM test can drive the
+ * coroutines without a main looper.
  */
-class ChatViewModel(private val api: ChatApi, private val sessionId: String) : ViewModel() {
+@OptIn(SavedStateHandleSaveableApi::class)
+class ChatViewModel(
+    private val api: ChatApi,
+    private val sessionId: String,
+    saved: SavedStateHandle,
+    scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
+) : ViewModel(scope) {
 
     var messages by mutableStateOf<List<HistoryMessage>>(emptyList())
         private set
@@ -35,11 +55,15 @@ class ChatViewModel(private val api: ChatApi, private val sessionId: String) : V
     var hasOlder by mutableStateOf(false)
         private set
     private var offset = 0
+    private var loadingOlder = false
 
     /** The turn being streamed, or null when no run is being followed. */
     var live by mutableStateOf<TurnState?>(null)
         private set
     var running by mutableStateOf(false)
+        private set
+    /** False until the run id is known: a stop before then has nothing to name. */
+    var canStop by mutableStateOf(false)
         private set
     /** A question (or approval gate) the last run ended on. */
     var ask by mutableStateOf<AskUser?>(null)
@@ -51,11 +75,11 @@ class ChatViewModel(private val api: ChatApi, private val sessionId: String) : V
     /** The session's model as history reports it, until the user picks one. */
     var sessionModel by mutableStateOf<String?>(null)
         private set
-    var selected by mutableStateOf<ModelChoice?>(null)
+    var selected by saved.saveable("selected", stateSaver = ModelSaver) { mutableStateOf<ModelChoice?>(null) }
 
-    var toggles by mutableStateOf(Toggles())
-    var draft by mutableStateOf("")
-    var attachments by mutableStateOf<List<UploadedFile>>(emptyList())
+    var toggles by saved.saveable("toggles", stateSaver = TogglesSaver) { mutableStateOf(Toggles()) }
+    var draft by saved.saveable("draft", stateSaver = autoSaver()) { mutableStateOf("") }
+    var attachments by saved.saveable("attachments", stateSaver = FilesSaver) { mutableStateOf<List<UploadedFile>>(emptyList()) }
         private set
     var uploading by mutableStateOf(false)
         private set
@@ -77,13 +101,23 @@ class ChatViewModel(private val api: ChatApi, private val sessionId: String) : V
         start { api.resume(sessionId) }
     }
 
-    fun loadOlder() = viewModelScope.launch {
-        if (!hasOlder) return@launch
-        report {
-            val page = api.history(sessionId, maxOf(offset - ChatApi.PAGE, 0))
-            messages = page.messages + messages
-            offset = page.offset
-            hasOlder = page.hasMoreBefore
+    /** One load at a time. The limit stops the page exactly where the shown
+     * rows begin (the last page need not start on a multiple of 50), and
+     * anything already shown is dropped anyway: a reload that lands mid-load
+     * moves the offset, and a repeated dbId would crash the list. */
+    fun loadOlder() {
+        if (!hasOlder || loadingOlder) return
+        loadingOlder = true
+        viewModelScope.launch {
+            report {
+                val from = maxOf(offset - ChatApi.PAGE, 0)
+                val page = api.history(sessionId, from, offset - from)
+                val shown = messages.mapNotNullTo(HashSet()) { it.dbId }
+                messages = page.messages.filter { it.dbId !in shown } + messages
+                offset = page.offset
+                hasOlder = page.hasMoreBefore
+            }
+            loadingOlder = false
         }
     }
 
@@ -117,9 +151,15 @@ class ChatViewModel(private val api: ChatApi, private val sessionId: String) : V
         }
     }
 
+    /** Marked on the follower before asking, because the stream can end
+     * before stop's own answer arrives; unmarked if the server refused. */
     fun stop() = viewModelScope.launch {
-        val runId = follower?.runId ?: return@launch
-        report { api.stop(sessionId, runId) }
+        val f = follower ?: return@launch
+        val runId = f.runId ?: return@launch
+        f.stopping = true
+        var stopped = false
+        report { stopped = api.stop(sessionId, runId) }
+        f.stopping = stopped
     }
 
     fun attachFile(name: String, mime: String, bytes: ByteArray) = viewModelScope.launch {
@@ -150,11 +190,16 @@ class ChatViewModel(private val api: ChatApi, private val sessionId: String) : V
             val f = RunFollower(api, sessionId).also { follower = it }
             val mirror = launch { f.turn.collect { live = it } }
             val end = try {
-                open()?.let { f.follow(it) }
+                open()?.let { stream ->
+                    canStop = stream.runId != null
+                    f.follow(stream)
+                }
             } catch (e: ApiException) {
                 RunEnd.Failed(if (expiredOn409 && e.status == 409) "Approval expired" else e.message)
             } catch (_: IOException) {
                 RunEnd.Failed("Could not reach the server")
+            } catch (_: JSONException) {
+                RunEnd.Failed(UNEXPECTED)
             }
             mirror.cancel()
             val last = f.turn.value
@@ -165,6 +210,7 @@ class ChatViewModel(private val api: ChatApi, private val sessionId: String) : V
             }
             live = null
             running = false
+            canStop = false
             follower = null
         }
     }
@@ -185,6 +231,27 @@ class ChatViewModel(private val api: ChatApi, private val sessionId: String) : V
             error = e.message
         } catch (_: IOException) {
             error = "Could not reach the server"
+        } catch (_: JSONException) {
+            // A 2xx that is not the JSON expected, e.g. a proxy's HTML page.
+            error = UNEXPECTED
         }
+    }
+
+    internal companion object {
+        const val UNEXPECTED = "Unexpected response from the server"
+
+        // Flat lists of strings and booleans: all a saved-state Bundle holds.
+        val TogglesSaver = listSaver<Toggles, Boolean>(
+            save = { listOf(it.agent, it.web, it.terminal, it.research) },
+            restore = { Toggles(it[0], it[1], it[2], it[3]) },
+        )
+        val ModelSaver = listSaver<ModelChoice?, String>(
+            save = { m -> m?.let { listOf(it.endpointId, it.endpointName, it.model, it.display) }.orEmpty() },
+            restore = { if (it.size == 4) ModelChoice(it[0], it[1], it[2], it[3]) else null },
+        )
+        val FilesSaver = listSaver<List<UploadedFile>, String>(
+            save = { files -> files.flatMap { listOf(it.id, it.name, it.mime) } },
+            restore = { flat -> flat.chunked(3).map { UploadedFile(it[0], it[1], it[2]) } },
+        )
     }
 }

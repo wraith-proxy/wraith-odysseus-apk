@@ -4,9 +4,12 @@ import com.thomaspeoples.wraithodysseus.auth.AuthRepo
 import com.thomaspeoples.wraithodysseus.net.Http
 import com.thomaspeoples.wraithodysseus.net.SessionCookie
 import com.thomaspeoples.wraithodysseus.net.SessionState
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.job
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.mockwebserver.MockResponse
@@ -122,5 +125,19 @@ class LoginViewModelTest {
         vm.checkServer()
         settle()
         assertEquals(AuthRepo.SETUP_REQUIRED, vm.state.value.serverError)
+    }
+
+    @Test
+    fun aChangedUrlDropsTheCheckStillRunningForTheOldOne() = runBlocking {
+        val vm = vm()
+        server.enqueue(MockResponse().setBody(fixture("version.json")).setHeadersDelay(500, TimeUnit.MILLISECONDS))
+        vm.checkServer()
+        // Off this thread, so the check gets to send its request meanwhile.
+        withContext(Dispatchers.IO) { server.takeRequest() }
+        vm.onServerUrl("http://127.0.0.1:1/")
+        settle()
+        // Neither the old server's version nor the cancellation as an error.
+        assertNull(vm.state.value.serverVersion)
+        assertNull(vm.state.value.serverError)
     }
 }

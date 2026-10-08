@@ -75,6 +75,17 @@ class RunFollowerTest {
     }
 
     @Test
+    fun aStreamEndingAfterAStopIsTheEndNotADrop() = runBlocking {
+        // The server ends a stopped run's stream without [DONE].
+        server.enqueue(sse("data: {\"delta\": \"Hel\"}\n\n", "run-1"))
+        val f = follower()
+        f.stopping = true
+        assertEquals(RunEnd.Stopped, withTimeout(10_000) { f.follow(send()) })
+        assertEquals(1, server.requestCount)
+        assertEquals(emptyList<Long>(), waits)
+    }
+
+    @Test
     fun resume404EndsTheRun() = runBlocking {
         server.enqueue(dropped())
         server.enqueue(MockResponse().setResponseCode(404).setBody(fixture("chat_resume_404.json")))

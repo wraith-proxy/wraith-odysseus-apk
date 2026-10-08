@@ -60,7 +60,9 @@ import com.thomaspeoples.wraithodysseus.ui.theme.Muted
 import com.thomaspeoples.wraithodysseus.ui.update.UpdateAvailableDialog
 import com.thomaspeoples.wraithodysseus.update.UpdateChecker
 import java.io.IOException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONException
 
 /** Every route in the app, so the screens can be built separately and wired
@@ -90,8 +92,12 @@ private val TABS = setOf(Routes.CHATS, Routes.EMAIL)
 @Composable
 fun AppNav() {
     val app = LocalContext.current.applicationContext as WraithOdysseusApp
+    // The first cookie read decrypts it through the Keystore (a disk read and
+    // binder IPC), so it is done on IO; the theme's background shows meanwhile.
+    val start = produceState<String?>(null) {
+        value = withContext(Dispatchers.IO) { startRoute(app.session.cookie, System.currentTimeMillis()) }
+    }.value ?: return
     val nav = rememberNavController()
-    val start = remember { startRoute(app.session.cookie, System.currentTimeMillis()) }
     val chatApi = remember { ChatApi(app.http) }
     val emailApi = remember { EmailApi(app.http) }
     val scope = rememberCoroutineScope()

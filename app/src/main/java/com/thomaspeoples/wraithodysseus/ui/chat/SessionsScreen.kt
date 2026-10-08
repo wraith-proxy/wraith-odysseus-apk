@@ -46,6 +46,7 @@ import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import kotlinx.coroutines.launch
+import org.json.JSONException
 
 /** The Chats tab: every session, newest first (important ones pinned on top
  * by the server), refreshed on pull-down and whenever the screen resumes.
@@ -67,6 +68,8 @@ fun SessionsScreen(api: ChatApi, onOpen: (String) -> Unit, onSearch: () -> Unit,
             error = e.message
         } catch (_: IOException) {
             error = "Could not reach the server. Is Tailscale connected?"
+        } catch (_: JSONException) {
+            error = "Unexpected response from the server"
         }
     }
 

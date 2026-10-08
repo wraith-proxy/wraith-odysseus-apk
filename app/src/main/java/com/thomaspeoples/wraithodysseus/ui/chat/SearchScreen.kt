@@ -39,6 +39,7 @@ import com.thomaspeoples.wraithodysseus.ui.theme.Muted
 import com.thomaspeoples.wraithodysseus.ui.theme.OdyColors
 import java.io.IOException
 import kotlinx.coroutines.delay
+import org.json.JSONException
 
 /** Search across every chat's messages. Typing restarts a 300ms wait, so
  * only a pause in typing reaches the server. */
@@ -64,6 +65,8 @@ fun SearchScreen(api: ChatApi, onOpen: (String) -> Unit, onBack: () -> Unit) {
             error = e.message
         } catch (_: IOException) {
             error = "Could not reach the server"
+        } catch (_: JSONException) {
+            error = "Unexpected response from the server"
         }
     }
 

@@ -14,6 +14,9 @@ sealed interface RunEnd {
     data object Done : RunEnd
     /** Resume said 404: the run finished (or died) while we were away. */
     data object Gone : RunEnd
+    /** Stop was accepted: the server ends the stream without [DONE], and
+     * the partial reply is saved. */
+    data object Stopped : RunEnd
     data class Failed(val message: String) : RunEnd
 }
 
@@ -35,6 +38,10 @@ class RunFollower(
     @Volatile var runId: String? = null
         private set
 
+    /** Set while a stop is being asked for (and kept once it is accepted):
+     * the stream end that follows is the run ending, not a drop to resume. */
+    @Volatile var stopping = false
+
     suspend fun follow(first: RunStream): RunEnd {
         var stream = first
         while (true) {
@@ -48,6 +55,7 @@ class RunFollower(
             } catch (_: IOException) {
                 // Dropped mid-run; fall through to resume.
             }
+            if (stopping) return RunEnd.Stopped
             // A stream that just ends without [DONE] is a drop too.
             stream = reconnect() ?: return RunEnd.Gone
         }

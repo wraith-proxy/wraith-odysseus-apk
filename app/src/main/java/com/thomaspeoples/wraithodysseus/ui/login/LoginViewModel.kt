@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.thomaspeoples.wraithodysseus.auth.AuthRepo
 import com.thomaspeoples.wraithodysseus.auth.LoginResult
 import com.thomaspeoples.wraithodysseus.net.HostPolicy
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -57,9 +58,13 @@ class LoginViewModel(
         if (initialUrl.isNotBlank()) checkServer()
     }
 
-    fun onServerUrl(value: String) = _state.update {
-        // A different server: whatever the old one said no longer applies.
-        it.copy(serverUrl = value, serverVersion = null, serverError = null, needsTotp = false, totpCode = "", error = null)
+    fun onServerUrl(value: String) {
+        // A different server: whatever the old one said no longer applies,
+        // including a check of it that has not answered yet.
+        serverCheck?.cancel()
+        _state.update {
+            it.copy(serverUrl = value, serverVersion = null, serverError = null, needsTotp = false, totpCode = "", error = null)
+        }
     }
 
     fun onUsername(value: String) = _state.update {
@@ -82,6 +87,9 @@ class LoginViewModel(
                 val version = repo.version(origin)
                 _state.update { it.copy(serverVersion = "Odysseus ${version.version}") }
                 if (!repo.status(origin).configured) AuthRepo.SETUP_REQUIRED else null
+            } catch (e: CancellationException) {
+                // Replaced by a newer check; its text is not a server error.
+                throw e
             } catch (e: Exception) {
                 e.message ?: "Could not reach the server"
             }

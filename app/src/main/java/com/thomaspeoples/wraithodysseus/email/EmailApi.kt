@@ -2,7 +2,9 @@ package com.thomaspeoples.wraithodysseus.email
 
 import com.thomaspeoples.wraithodysseus.net.ApiException
 import com.thomaspeoples.wraithodysseus.net.Http
-import java.net.SocketTimeoutException
+import java.io.IOException
+import java.net.ConnectException
+import java.net.UnknownHostException
 import okhttp3.HttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
@@ -153,16 +155,21 @@ class EmailApi(private val http: Http, private val sendTimeoutSeconds: Long = Ht
      * wait_for_delivery:true, so "Sent" means the SMTP server accepted it.
      * The server's 45s timeout still applies, so a 504 (or our own read
      * timeout) says nothing either way: the draft is kept and the caller is
-     * told to check Sent rather than risk a duplicate by retrying.
+     * told to check Sent rather than risk a duplicate by retrying. Only a
+     * failure to connect at all is known not to have sent anything; any other
+     * network error may have come after the body went out.
      */
     suspend fun send(request: SendRequest): SendResult {
         val body = sendJson(request).toString().toRequestBody(JSON)
         val response = try {
-            http.call(Request.Builder().url(http.url("/api/email/send")).post(body).build(), sendTimeoutSeconds)
+            // No retry: OkHttp would otherwise re-POST after a connection
+            // failure, which can deliver twice and hides what really failed.
+            http.call(Request.Builder().url(http.url("/api/email/send")).post(body).build(), sendTimeoutSeconds, retry = false)
         } catch (e: ApiException) {
             return if (e.status == 504) SendResult.Unconfirmed else SendResult.Failed(e.message)
-        } catch (_: SocketTimeoutException) {
-            return SendResult.Unconfirmed
+        } catch (e: IOException) {
+            return if (e is ConnectException || e is UnknownHostException) SendResult.Failed(describe(e))
+            else SendResult.Unconfirmed
         }
         return try {
             checkBody(response)

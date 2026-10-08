@@ -20,7 +20,7 @@ data class SessionCookie(val value: String, val expiresAt: Long, val secure: Boo
 /** What Http needs from storage. An interface only so JVM tests can hand Http
  * an in-memory fake instead of the Keystore-backed SessionStore. */
 interface SessionState {
-    val baseUrl: HttpUrl?
+    var baseUrl: HttpUrl?
     var cookie: SessionCookie?
 }
 

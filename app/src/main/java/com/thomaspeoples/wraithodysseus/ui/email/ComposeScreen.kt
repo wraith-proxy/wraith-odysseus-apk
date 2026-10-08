@@ -4,6 +4,7 @@ import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -73,11 +74,21 @@ fun ComposeScreen(api: EmailApi, onDone: () -> Unit, reply: EmailMessage? = null
     // offers the same accounts the inbox lists, default first.
     var senders by remember { mutableStateOf<List<EmailAccount?>?>(if (draft != null) emptyList() else null) }
     var senderIndex by rememberSaveable { mutableIntStateOf(0) }
-    var sending by remember { mutableStateOf(false) }
+    // Saveable, because the send dies with this composition (a rotation
+    // mid-send cancels it) and whether it reached the server is then unknown:
+    // a restored "sending" comes back as "unconfirmed", never as a fresh Send.
+    var sending by rememberSaveable { mutableStateOf(false) }
     var problem by remember { mutableStateOf<String?>(null) }
-    var unconfirmed by remember { mutableStateOf(false) }
+    var unconfirmed by rememberSaveable { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+
+    LaunchedEffect(Unit) {
+        if (sending) {
+            sending = false
+            unconfirmed = true
+        }
+    }
 
     LaunchedEffect(Unit) {
         if (draft != null) return@LaunchedEffect
@@ -138,7 +149,8 @@ fun ComposeScreen(api: EmailApi, onDone: () -> Unit, reply: EmailMessage? = null
         },
     ) { padding ->
         Column(
-            Modifier.padding(padding).fillMaxSize().imePadding().verticalScroll(rememberScrollState()),
+            // Consumed first, or imePadding adds the navigation bar a second time.
+            Modifier.padding(padding).consumeWindowInsets(padding).fillMaxSize().imePadding().verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             if (unconfirmed) Banner("Delivery unconfirmed — check Sent in the web UI", OdyColors.Warn)

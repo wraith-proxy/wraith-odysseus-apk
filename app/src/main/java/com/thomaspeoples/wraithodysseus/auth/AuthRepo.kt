@@ -69,6 +69,11 @@ class AuthRepo(private val http: Http, private val session: SessionState) {
                 if (json.optBoolean("requires_totp", false)) return LoginResult.TotpRequired
                 val cookie = Http.sessionCookie(response) ?: return LoginResult.Failed(NO_COOKIE)
                 if (cookie.secure && !origin.isHttps) return LoginResult.Failed(NEEDS_HTTPS)
+                // Origin first: Http sends the cookie to whatever origin is
+                // stored, so storing it the other way round would, for a
+                // moment (or for good, if the process died in between), hand
+                // this server's cookie to the previous one.
+                session.baseUrl = origin
                 session.cookie = cookie
                 LoginResult.Ok(json.optString("username", username))
             }

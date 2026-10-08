@@ -76,6 +76,19 @@ class ChatApiTest {
         server.enqueue(json("history_page.json"))
         api.history("s1", 0)
         assertEquals("/api/history/s1?limit=50&offset=0", server.takeRequest().path)
+        server.enqueue(json("history_page.json"))
+        api.history("s1", 0, limit = 30)
+        assertEquals("/api/history/s1?limit=30&offset=0", server.takeRequest().path)
+    }
+
+    @Test
+    fun anAttachmentWithoutAnIdIsSkippedNotFatal() {
+        val page = ChatApi.parseHistory(
+            JSONObject(
+                """{"history":[{"role":"user","content":"hi","metadata":{"attachments":[{"name":"x.png"},{"id":"f-1","name":"y.png","mime":"image/png"}]}}]}""",
+            ),
+        )
+        assertEquals(listOf(UploadedFile("f-1", "y.png", "image/png")), page.messages.single().attachments)
     }
 
     @Test

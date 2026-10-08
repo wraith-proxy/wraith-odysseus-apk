@@ -144,6 +144,24 @@ class AuthRepoTest {
         assertEquals(LoginResult.Failed(AuthRepo.NO_COOKIE), repo.login(origin, "alice", "hunter2", null))
     }
 
+    @Test
+    fun aLoginToAnotherServerNeverSendsItsCookieToTheOldOne() = runBlocking {
+        val other = MockWebServer().apply { start() }
+        try {
+            val otherOrigin = other.url("/")
+            other.enqueue(json(200, "login_ok.json").addHeader("Set-Cookie", sessionSetCookie))
+            assertEquals(LoginResult.Ok("alice"), repo.login(otherOrigin, "alice", "hunter2", null))
+            // Stored together: the cookie is never filed under the old origin.
+            assertEquals(otherOrigin, session.baseUrl)
+
+            server.enqueue(json(200, "version.json"))
+            repo.version(origin)
+            assertNull(server.takeRequest().getHeader("Cookie"))
+        } finally {
+            other.shutdown()
+        }
+    }
+
     // -- logout -----------------------------------------------------------
 
     @Test

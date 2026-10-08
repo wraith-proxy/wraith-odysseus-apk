@@ -56,6 +56,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.thomaspeoples.wraithodysseus.chat.AskOption
 import com.thomaspeoples.wraithodysseus.chat.AskUser
@@ -80,7 +81,7 @@ import kotlinx.coroutines.withContext
  * /api/auth/status: the Terminal chip only exists for those who have it. */
 @Composable
 fun ChatScreen(api: ChatApi, sessionId: String, canUseBash: Boolean, onBack: () -> Unit) {
-    val vm = viewModel(key = sessionId) { ChatViewModel(api, sessionId) }
+    val vm = viewModel(key = sessionId) { ChatViewModel(api, sessionId, createSavedStateHandle()) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
@@ -135,6 +136,7 @@ fun ChatScreen(api: ChatApi, sessionId: String, canUseBash: Boolean, onBack: () 
                     ?: run { vm.error = "Could not read that file" } } },
             onRemoveAttachment = vm::removeAttachment,
             running = vm.running,
+            canStop = vm.canStop,
             onSend = vm::send,
             onStop = { vm.stop() },
         )
