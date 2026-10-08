@@ -13,7 +13,7 @@ import java.util.Properties
 // failure instead of a silent downgrade.
 // 0.0.0 is a placeholder: there are no tags yet, so commitizen reads the current
 // version as 0.0.0 and rewrites this line to the first real one on bump.
-val appVersionName = "0.0.0"
+val appVersionName = "0.1.0"
 val appVersionCode = appVersionName.split(".").map { it.toInt() }.let { (major, minor, patch) ->
     require(minor < 100 && patch < 100) { "versionCode scheme needs minor and patch < 100: $appVersionName" }
     (major * 10000 + minor * 100 + patch)
