@@ -1,0 +1,5 @@
+{"documents":[
+{"id":"d1","session_id":"s1","session_name":"Trip planning","title":"Itinerary","language":"markdown","preview":"# Day 1\nArrive","version_count":4,"created_at":"2026-10-01T08:00:00","updated_at":"2026-10-08T09:30:00Z"},
+{"id":"d2","session_id":null,"session_name":null,"title":null,"language":"pdf","preview":"<!-- pdf_source upload_id=\"u1\" -->","version_count":1,"created_at":null,"updated_at":null},
+{"title":"No id","language":"text"}
+],"total":75,"languages":{"markdown":60,"pdf":15},"session_count":3}
