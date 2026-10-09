@@ -542,7 +542,11 @@ class EmailApi(private val http: Http, private val sendTimeoutSeconds: Long = Ht
      * sent: a message that fails mid-send must stay recoverable. Returns the
      * draft too, for the next attempt to replace rather than duplicate.
      */
-    suspend fun sendWithRecovery(request: SendRequest, previous: DraftRef?): Pair<SendResult, DraftRef?> {
+    suspend fun sendWithRecovery(
+        request: SendRequest,
+        previous: DraftRef?,
+        onDraft: (DraftRef) -> Unit = {},
+    ): Pair<SendResult, DraftRef?> {
         val draft = try {
             saveDraft(request, previous)
         } catch (e: ApiException) {
@@ -550,6 +554,8 @@ class EmailApi(private val http: Http, private val sendTimeoutSeconds: Long = Ht
         } catch (e: IOException) {
             return SendResult.Failed("Not sent: could not save a recovery copy (${describe(e)})") to previous
         }
+        // Reported before the send, which a rotation can cancel: the next try must replace this draft.
+        onDraft(draft)
         return send(request.copy(draftUid = draft.uid, draftFolder = draft.folder)) to draft
     }
 

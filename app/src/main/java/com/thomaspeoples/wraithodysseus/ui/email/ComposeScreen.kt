@@ -140,6 +140,9 @@ fun ComposeScreen(
     // survives a rotation; busy counts uploads still running.
     var staged by rememberSaveable(stateSaver = StagedList) { mutableStateOf(emptyList<StagedFile>()) }
     var busy by remember { mutableIntStateOf(0) }
+    // Forward originals already copied, by attachment index (comma-separated):
+    // files picked meanwhile change `staged`, so its size cannot say where staging got to.
+    var forwardDone by rememberSaveable { mutableStateOf("") }
     // The recovery draft of a failed or unconfirmed send, replaced by the next try.
     var draftUid by rememberSaveable { mutableStateOf("") }
     var draftFolder by rememberSaveable { mutableStateOf("") }
@@ -166,6 +169,9 @@ fun ComposeScreen(
     // mid-send cancels it) and whether it reached the server is then unknown:
     // a restored "sending" comes back as "unconfirmed", never as a fresh Send.
     var sending by rememberSaveable { mutableStateOf(false) }
+    // Which kind of request `sending` stands for, so a restored schedule is not
+    // reported as an unconfirmed send (it would be in Scheduled, not Sent).
+    var scheduleSending by rememberSaveable { mutableStateOf(false) }
     var problem by remember { mutableStateOf<String?>(null) }
     var unconfirmed by rememberSaveable { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -219,7 +225,12 @@ fun ComposeScreen(
     LaunchedEffect(Unit) {
         if (sending) {
             sending = false
-            unconfirmed = true
+            if (scheduleSending) {
+                scheduleSending = false
+                problem = "Scheduling was interrupted — check Scheduled in the web UI before trying again"
+            } else {
+                unconfirmed = true
+            }
         }
     }
 
@@ -263,7 +274,10 @@ fun ComposeScreen(
         problem = null
         unconfirmed = false
         scope.launch {
-            val (result, saved) = api.sendWithRecovery(message, DraftRef(draftUid.ifEmpty { null }, draftFolder.ifEmpty { null }))
+            val (result, saved) = api.sendWithRecovery(message, DraftRef(draftUid.ifEmpty { null }, draftFolder.ifEmpty { null })) {
+                draftUid = it.uid.orEmpty()
+                draftFolder = it.folder.orEmpty()
+            }
             draftUid = saved?.uid.orEmpty()
             draftFolder = saved?.folder.orEmpty()
             when (result) {
@@ -288,10 +302,16 @@ fun ComposeScreen(
         guarded {
             val message = request()
             sending = true
+            scheduleSending = true
             problem = null
             scope.launch {
                 try {
                     api.schedule(message, sendAtIso(at))
+                    // /schedule takes no draft ids, so a recovery draft left by an
+                    // earlier failed Send would stay in Drafts: remove it, best effort.
+                    if (draftUid.isNotEmpty() && draftFolder.isNotEmpty()) {
+                        runCatching { api.deletePermanent(message.accountId, draftFolder, draftUid) }
+                    }
                     val shown = at.format(DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM))
                     Toast.makeText(context, "Scheduled for $shown", Toast.LENGTH_LONG).show()
                     onDone()
@@ -301,6 +321,7 @@ fun ComposeScreen(
                     problem = describe(e)
                 }
                 sending = false
+                scheduleSending = false
             }
         }
     }
@@ -338,15 +359,16 @@ fun ComposeScreen(
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris -> uris.forEach(::upload) }
 
     // Forward: copy the original's attachments into the compose uploads, as
-    // the web does when it opens. A restored screen carries on from how many
-    // it already has, in order.
+    // the web does when it opens. A restored screen carries on with the
+    // originals not yet copied.
     LaunchedEffect(Unit) {
         if (forward == null) return@LaunchedEffect
         busy++
         try {
-            for (a in forward.attachments.drop(staged.size)) {
+            for (a in forward.attachments.filter { it.index.toString() !in forwardDone.split(',') }) {
                 val token = api.stageAttachment(forward.accountId, forward.folder, forward.uid, a.index)
                 staged = staged + StagedFile(token, a.filename, a.size)
+                forwardDone = if (forwardDone.isEmpty()) a.index.toString() else "$forwardDone,${a.index}"
             }
         } catch (e: ApiException) {
             problem = "Could not attach the original files: ${e.message}"

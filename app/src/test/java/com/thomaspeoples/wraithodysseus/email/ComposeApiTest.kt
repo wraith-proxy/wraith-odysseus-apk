@@ -124,6 +124,16 @@ class ComposeApiTest {
     }
 
     @Test
+    fun theDraftIsReportedBeforeTheSendGoesOut() = runBlocking {
+        json("""{"success":true,"draft_folder":"Drafts","draft_uid":"77"}""")
+        json("""{"success":true}""")
+        var seenAtSend = -1
+        api.sendWithRecovery(request, null) { seenAtSend = server.requestCount }
+        // Only the /draft request had reached the server when it was reported.
+        assertEquals(1, seenAtSend)
+    }
+
+    @Test
     fun nothingIsSentWhenTheRecoveryDraftCannotBeSaved() = runBlocking {
         json("""{"success":false,"error":"IMAP APPEND failed: NO"}""")
         val (result, draft) = api.sendWithRecovery(request, null)

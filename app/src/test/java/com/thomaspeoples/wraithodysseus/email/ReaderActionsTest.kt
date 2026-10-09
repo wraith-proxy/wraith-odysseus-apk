@@ -75,13 +75,14 @@ class ReaderActionsTest {
     }
 
     @Test
-    fun forwardHasNoRecipientNoThreadingAndMarksNothingAnswered() {
+    fun forwardHasNoRecipientNoThreadingButMarksTheOriginalAnswered() {
         val d = forwardDraft(msg(to = "me@example.com", subject = "Invoice"), "acc")
         assertEquals("", d.to)
         assertEquals("Fwd: Invoice", d.subject)
         assertNull(d.inReplyTo)
         assertNull(d.references)
-        assertNull(d.sourceUid)
+        assertEquals(msg().uid, d.sourceUid)
+        assertEquals(msg().folder, d.sourceFolder)
         assertTrue(d.body.contains("---------- Forwarded message ----------"))
         assertTrue(d.body.contains("From: Dana <dana@example.com>"))
         assertTrue(d.body.contains("Subject: Invoice"))

@@ -78,9 +78,10 @@ fun forwardSubject(subject: String): String {
 }
 
 /**
- * The forward of [original]: no recipient, no threading headers (the web
- * sends none for a forward) and nothing marked answered, with the message
- * pasted under a "Forwarded message" header. HTML-only mail is quoted from
+ * The forward of [original]: no recipient and no threading headers (the web
+ * sends none for a forward), but source_uid and source_folder as for a reply
+ * (emailInbox.js adds X-Source-UID in every mode), so /send marks the
+ * original answered. The message is pasted under a "Forwarded message" header. HTML-only mail is quoted from
  * its tags stripped, as the web does.
  */
 fun forwardDraft(original: EmailMessage, accountId: String?): SendRequest {
@@ -94,7 +95,8 @@ fun forwardDraft(original: EmailMessage, accountId: String?): SendRequest {
         if (original.to.isNotBlank()) append("To: ${original.to}\n")
         append("\n").append(text)
     }
-    return SendRequest(to = "", cc = "", subject = forwardSubject(original.subject), body = body, accountId = accountId)
+    return SendRequest(to = "", cc = "", subject = forwardSubject(original.subject), body = body, accountId = accountId,
+        sourceUid = original.uid, sourceFolder = original.folder)
 }
 
 /** The inbox row for a message that is open, which is what "Remind to reply" and the like take. */
