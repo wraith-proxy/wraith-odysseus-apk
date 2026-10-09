@@ -28,8 +28,19 @@ jobs:
       - name: Build debug APK
         run: ./gradlew assembleDebug
 
+  security-scan:
+    runs-on: ghost-runner-android
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # gitleaks reads every commit
+
+      - name: Secrets, code patterns and dependency CVEs
+        run: bin/security-scan.sh
+
   auto-merge:
-    needs: test-and-verify
+    needs: [test-and-verify, security-scan]
     if: github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:

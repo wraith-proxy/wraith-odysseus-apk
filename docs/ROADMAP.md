@@ -41,6 +41,12 @@ uses the server's existing API; nothing here needs a server change.
 
 Compare and Cookbook stay in the web UI; their drawer rows open it.
 
+## CI
+
+- [ ] Bake gitleaks, semgrep and Trivy into the `ghost-runner-android` image,
+      then drop the pinned downloads from `bin/security-scan.sh`.
+- [ ] A weekly scheduled Trivy run, since new CVEs land without a push.
+
 ## F-Droid
 
 Ready now: no proprietary dependencies, `INTERNET` only, checksummed wrapper,

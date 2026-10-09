@@ -27,9 +27,26 @@ the update check. The Compose screens themselves are checked on a device.
 
 | File | Trigger | Runner | Does |
 |---|---|---|---|
-| `test.yml` | push to any branch but `main` | `ghost-runner-android` | unit tests + coverage, Android Lint, `assembleDebug`, then auto-merge |
+| `test.yml` | push to any branch but `main` | `ghost-runner-android` | unit tests + coverage, Android Lint, `assembleDebug`, security scan, then auto-merge |
 | `release.yml` | push to `main` | `ghost-runner` then `ghost-runner-android` | version bump, tag, build the tag, verify signing, publish release |
 | `pages.yml` | push to `main` | `ghost-runner-android` | coverage badge, mkdocs build, publish to ghost-site |
+
+### Security scan
+
+`bin/security-scan.sh` runs three checks and fails the job on any hit:
+
+- **gitleaks** over every commit. `.gitleaksignore` lists the one fake test
+  token.
+- **semgrep** with the Kotlin, Java, mobsfscan, secrets and OWASP Top 10
+  rule packs over `app/src/main`. The exported launcher activity is the one
+  expected hit and is excluded.
+- **Trivy** over the release runtime classpath, which is the libraries in the
+  APK. `bin/lock-release.gradle` writes a throwaway `gradle.lockfile` for it.
+  Its databases come from `ghcr.io`, not the default `mirror.gcr.io`.
+
+Each tool is downloaded at a pinned version and checked against a pinned
+SHA-256. Run it locally the same way as the build below, with
+`bin/security-scan.sh` as the command.
 
 ### Release, step by step
 

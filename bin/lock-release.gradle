@@ -1,0 +1,10 @@
+// Init script for bin/security-scan.sh: locks the release runtime classpath,
+// the libraries that ship in the APK, so `--write-locks` writes
+// app/gradle.lockfile for Trivy. Build tooling (AGP, lint) is left out:
+// it never reaches a phone. The repo itself does not lock dependencies; the
+// lockfile is thrown away after the scan.
+allprojects {
+    configurations.matching { it.name == 'releaseRuntimeClasspath' }.configureEach {
+        resolutionStrategy.activateDependencyLocking()
+    }
+}

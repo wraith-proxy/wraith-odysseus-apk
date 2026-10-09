@@ -1,0 +1,2 @@
+# AuthRepoTest's fake session token, "0123456789abcdef".repeat(4).
+2f526f04e39c43e8194707c14aafae10d5d5725c:app/src/test/java/com/thomaspeoples/wraithodysseus/auth/AuthRepoTest.kt:generic-api-key:31
