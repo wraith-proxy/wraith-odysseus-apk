@@ -29,6 +29,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -51,6 +52,9 @@ import com.thomaspeoples.wraithodysseus.chat.ModelChoice
 import com.thomaspeoples.wraithodysseus.chat.groupModels
 import com.thomaspeoples.wraithodysseus.chat.label
 import com.thomaspeoples.wraithodysseus.ui.icons.Lucide
+import com.thomaspeoples.wraithodysseus.ui.chat.parts.Folds
+import com.thomaspeoples.wraithodysseus.ui.chat.parts.LIVE_FOLDS
+import com.thomaspeoples.wraithodysseus.ui.chat.parts.LocalFolds
 import com.thomaspeoples.wraithodysseus.ui.chat.parts.ResearchJobCards
 import com.thomaspeoples.wraithodysseus.ui.common.ConfirmDialog
 import com.thomaspeoples.wraithodysseus.ui.common.LocalSnackbar
@@ -78,6 +82,10 @@ fun ChatScreen(
     takeFirst: () -> FirstSend? = { null },
     /** The model a new chat starts on, when it is not the account's default. */
     startModel: ModelChoice? = null,
+    /** An archived chat, previewed read-only as the web does (sessions.js
+     * _arcPeekOpen): no composer and no message changes, a Restore bar instead. */
+    archived: Boolean = false,
+    onRestore: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val cacheDir = context.applicationContext.cacheDir
@@ -148,9 +156,13 @@ fun ChatScreen(
             vm.ask?.let { ask -> if (ask.approvalId == null) item { AskChips(ask, enabled = !vm.running, onAnswer = vm::answer) } }
             vm.live?.toolLine?.let { item { Text(it, color = Muted, style = MaterialTheme.typography.labelSmall, maxLines = 2, overflow = TextOverflow.Ellipsis) } }
             vm.live?.notices?.asReversed()?.forEach { n -> item { NoticeLine(n) } }
-            vm.live?.let { turn -> item(key = "live") { LiveBubble(turn, vm.sessionModel) } }
+            vm.live?.let { turn ->
+                item(key = "live") {
+                    CompositionLocalProvider(LocalFolds provides Folds(vm.folds, LIVE_FOLDS)) { LiveBubble(turn, vm.sessionModel) }
+                }
+            }
             if (vm.jobs.isNotEmpty()) item(key = "jobs") { ResearchJobCards(vm.jobs) }
-            itemsIndexed(bottomFirst, key = { i, m -> m.dbId ?: "local-${bottomFirst.size - i}" }) { _, m ->
+            itemsIndexed(bottomFirst, key = { i, m -> m.dbId ?: "local-${bottomFirst.size - i}" }) { i, m ->
                 Box(Modifier.animateItem(fadeInSpec = tween(300), placementSpec = tween(300))) {
                     val streaming = vm.rewriting?.takeIf { m.dbId != null && m.dbId == lastReplyId }
                     // The rewrite shows in place of the reply as it streams in.
@@ -160,7 +172,9 @@ fun ChatScreen(
                             m.copy(details = m.details.copy(mode = liveMode.mode, autoEscalated = liveMode.autoEscalated))
                         else -> m
                     }
-                    MessageItem(shown, vm::thumbnail, menu = messageMenu(vm, m, lastReplyId, onOpenChat), defaultModel = vm.sessionModel)
+                    CompositionLocalProvider(LocalFolds provides Folds(vm.folds, m.dbId ?: "local-${bottomFirst.size - i}")) {
+                        MessageItem(shown, vm::thumbnail, menu = messageMenu(vm, m, lastReplyId, onOpenChat, archived), defaultModel = vm.sessionModel)
+                    }
                 }
             }
             if (vm.hasOlder) item { TextButton(onClick = { vm.loadOlder() }) { Text("Load older") } }
@@ -176,6 +190,11 @@ fun ChatScreen(
                 Text(closed, color = Muted, modifier = Modifier.weight(1f))
                 TextButton(onClick = { vm.newChat() }) { Text("New chat") }
                 TextButton(onClick = onMenu) { Text("Chats") }
+            }
+        } else if (archived) {
+            Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Archived chat. Restore it to reply.", color = Muted, modifier = Modifier.weight(1f))
+                TextButton(onClick = onRestore) { Text("Restore") }
             }
         } else {
             Composer(
@@ -278,8 +297,8 @@ private fun RenameDialog(current: String, onDismiss: () -> Unit, onRename: (Stri
     )
 }
 
-private fun messageMenu(vm: ChatViewModel, m: HistoryMessage, lastReplyId: String?, onOpenChat: (String) -> Unit) = MessageMenu(
-    canChange = m.dbId != null && !vm.running,
+private fun messageMenu(vm: ChatViewModel, m: HistoryMessage, lastReplyId: String?, onOpenChat: (String) -> Unit, archived: Boolean) = MessageMenu(
+    canChange = !archived && m.dbId != null && !vm.running,
     lastReply = m.dbId != null && m.dbId == lastReplyId,
     editText = { vm.visibleForEdit(m) },
     deleteText = {

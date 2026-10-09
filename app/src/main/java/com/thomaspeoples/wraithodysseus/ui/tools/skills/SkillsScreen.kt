@@ -36,7 +36,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -68,8 +67,11 @@ fun SkillsScreen(env: ToolEnv) {
     val state = vm.state
     val snackbar = LocalSnackbar.current
     var searchOpen by rememberSaveable { mutableStateOf(false) }
-    var sheet by remember { mutableStateOf<Skill?>(null) }
-    var deleting by remember { mutableStateOf<Skill?>(null) }
+    // Held by name so an open sheet or delete confirm survives rotation.
+    var sheetKey by rememberSaveable { mutableStateOf<String?>(null) }
+    var deletingKey by rememberSaveable { mutableStateOf<String?>(null) }
+    val sheet = state.skills.firstOrNull { it.name == sheetKey }
+    val deleting = state.skills.firstOrNull { it.name == deletingKey }
 
     LaunchedEffect(vm) { vm.messages.collect { snackbar.showSnackbar(it) } }
 
@@ -132,7 +134,7 @@ fun SkillsScreen(env: ToolEnv) {
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.fillMaxSize(),
                     ) {
-                        items(visible, key = { it.name }) { s -> SkillCard(s, onOpen = { vm.view(s) }, onMenu = { sheet = s }) }
+                        items(visible, key = { it.name }) { s -> SkillCard(s, onOpen = { vm.view(s) }, onMenu = { sheetKey = s.name }) }
                     }
                 }
             }
@@ -143,9 +145,9 @@ fun SkillsScreen(env: ToolEnv) {
         val actions = listOf(
             SheetAction("Read", Lucide.BookOpen) { vm.view(s) },
             SheetAction(if (s.published) "Return to draft" else "Publish", if (s.published) Lucide.X else Lucide.Check) { vm.togglePublished(s) },
-            SheetAction("Delete", Lucide.Trash2, destructive = true) { deleting = s },
+            SheetAction("Delete", Lucide.Trash2, destructive = true) { deletingKey = s.name },
         )
-        ActionSheet(actions, onDismiss = { sheet = null }, title = s.name)
+        ActionSheet(actions, onDismiss = { sheetKey = null }, title = s.name)
     }
     deleting?.let { s ->
         ConfirmDialog(
@@ -153,7 +155,7 @@ fun SkillsScreen(env: ToolEnv) {
             text = "This removes its SKILL.md.",
             confirm = "Delete",
             onConfirm = { vm.delete(s) },
-            onDismiss = { deleting = null },
+            onDismiss = { deletingKey = null },
         )
     }
 }

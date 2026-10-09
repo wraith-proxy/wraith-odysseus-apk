@@ -1,6 +1,7 @@
 package com.thomaspeoples.wraithodysseus.ui.chat
 
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.autoSaver
 import androidx.compose.runtime.saveable.listSaver
@@ -10,6 +11,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.SavedStateHandleSaveableApi
 import androidx.lifecycle.viewmodel.compose.saveable
+import com.thomaspeoples.wraithodysseus.ui.chat.parts.handOverFolds
 import com.thomaspeoples.wraithodysseus.chat.AskOption
 import com.thomaspeoples.wraithodysseus.chat.AskUser
 import com.thomaspeoples.wraithodysseus.chat.ChatApi
@@ -94,8 +96,17 @@ class ChatViewModel(
     /** True for a chat not yet created on the server. */
     val isDraft = sessionId.isEmpty()
 
-    /** The first message of a new chat, held while its history loads so the load cannot wipe the message. */
+    private val handle = saved
+
+    /** The first message of a new chat, held while its history loads so the
+     * load cannot wipe the message. Its text and files are saved as well:
+     * process death in that wait puts them back in the composer (see init). */
     private var pendingFirst: FirstSend? = null
+        set(value) {
+            field = value
+            handle[FIRST_TEXT] = value?.text
+            handle[FIRST_FILES] = value?.files?.flatMapTo(ArrayList()) { listOf(it.id, it.name, it.mime) }
+        }
 
     /** Kept current by the screen: the auth status arrives after this ViewModel is built. */
     var canUseBash by mutableStateOf(canUseBash)
@@ -112,6 +123,9 @@ class ChatViewModel(
     /** The turn being streamed, or null when no run is being followed. */
     var live by mutableStateOf<TurnState?>(null)
         private set
+
+    /** Open folded boxes (sources, tools) per message; see Folds. */
+    val folds = mutableStateMapOf<String, Boolean>()
     var running by mutableStateOf(false)
         private set
     /** False until the run id is known: a stop before then has nothing to name. */
@@ -211,6 +225,13 @@ class ChatViewModel(
     private var probe: Job? = null
 
     init {
+        handle.get<String>(FIRST_TEXT)?.let { text ->
+            // The process died before the first message went out: offer it again.
+            val files = handle.get<ArrayList<String>>(FIRST_FILES).orEmpty().chunked(3).map { (id, name, mime) -> UploadedFile(id, name, mime) }
+            draft = if (draft.isBlank()) text else text + "\n" + draft
+            attachments = files + attachments
+            pendingFirst = null
+        }
         if (isDraft) {
             loading = false
         } else {
@@ -394,9 +415,9 @@ class ChatViewModel(
             if (id == null) {
                 say("No model available")
             } else {
-                // Known limit: from here the first message lives only in AppNav's
-                // in-memory handoff, so process death in this instant loses it and
-                // leaves an empty chat. Keeping the draft instead would show it twice.
+                // From here AppNav hands the message to the new chat, which saves it
+                // until it is sent (pendingFirst). Only process death in the same
+                // frame as this handoff could lose it.
                 draft = ""
                 attachments = emptyList()
                 openCreated(id, FirstSend(text, files, toggles.takeIf { togglesSet }, m))
@@ -1164,6 +1185,7 @@ class ChatViewModel(
                     if (opened) afterReload?.invoke(end)
                 }
             }
+            handOverFolds(folds, messages.lastOrNull { it.role == "assistant" }?.dbId)
             live = null
             running = false
             canStop = false
@@ -1204,6 +1226,8 @@ class ChatViewModel(
     }
 
     internal companion object {
+        const val FIRST_TEXT = "firstText"
+        const val FIRST_FILES = "firstFiles"
         const val WAIT_FOR_REPLY = "Wait for the reply to finish"
         const val UNEXPECTED = "Unexpected response from the server"
         const val EXPIRED = "Approval expired"

@@ -280,9 +280,8 @@ fun Composer(
 
 /**
  * A sideways swipe anywhere on the input row, watched on the way down so the
- * text field keeps its own gestures. Far enough and mostly horizontal.
- * Known limit: a long drag that extends a text selection also counts, as the
- * field does not tell this modifier about its selection.
+ * text field keeps its own gestures. Far enough and mostly horizontal, and
+ * not after a hold: a hold then drag is the field selecting text.
  */
 private fun Modifier.planSwipe(enabled: Boolean, onSwipe: () -> Unit): Modifier = pointerInput(enabled) {
     if (!enabled) return@pointerInput
@@ -290,13 +289,17 @@ private fun Modifier.planSwipe(enabled: Boolean, onSwipe: () -> Unit): Modifier 
         val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
         var dx = 0f
         var dy = 0f
+        var held: Boolean? = null
         while (true) {
             val change = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id } ?: break
             dx += change.positionChange().x
             dy += change.positionChange().y
+            if (held == null && maxOf(abs(dx), abs(dy)) > viewConfiguration.touchSlop) {
+                held = change.uptimeMillis - down.uptimeMillis >= viewConfiguration.longPressTimeoutMillis
+            }
             if (!change.pressed) break
         }
-        if (abs(dx) > SWIPE_DP.dp.toPx() && abs(dx) > 2 * abs(dy)) onSwipe()
+        if (held == false && abs(dx) > SWIPE_DP.dp.toPx() && abs(dx) > 2 * abs(dy)) onSwipe()
     }
 }
 

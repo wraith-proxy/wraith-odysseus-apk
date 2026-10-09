@@ -96,6 +96,7 @@ object Routes {
     /** A chat that exists only on the phone until its first message is sent. */
     const val NEW = "new"
     const val ARCHIVED = "archived"
+    const val ARCHIVED_CHAT = "archived/{sid}"
     const val ACCOUNT = "account"
     const val SEARCH = "search"
     const val EMAIL = "email"
@@ -396,10 +397,37 @@ fun AppNav() {
                         val archived = remember {
                             ArchivedController(SessionsApi(app.http, chatApi), archivedScope, { snackbar.showSnackbar(it) })
                         }
-                        // Known limit: the web previews an archived chat read-only (sessions.js
-                        // _arcPeekOpen), but here it opens as a normal chat. The server accepts a
-                        // send to it and leaves it archived; Restore first to see it in the drawer.
-                        ArchivedScreen(archived, onOpen = { nav.openChat(it) }, onBack = { nav.popBackStack() })
+                        ArchivedScreen(archived, onOpen = { nav.navigate("archived/" + Uri.encode(it)) }, onBack = { nav.popBackStack() })
+                    }
+                    composable(Routes.ARCHIVED_CHAT) { chat ->
+                        val sid = chat.arguments?.getString("sid").orEmpty()
+                        ChatScreen(
+                            api = chatApi,
+                            sessionId = sid,
+                            canUseBash = false,
+                            onMenu = ::openDrawer,
+                            onOpenChat = { nav.openChat(it) },
+                            onNewChat = ::openNewChat,
+                            archived = true,
+                            onRestore = {
+                                scope.launch {
+                                    val problem = try {
+                                        SessionsApi(app.http, chatApi).unarchive(sid)
+                                        null
+                                    } catch (e: ApiException) {
+                                        userMessage(e)
+                                    } catch (e: IOException) {
+                                        userMessage(e)
+                                    } catch (e: JSONException) {
+                                        userMessage(e)
+                                    }
+                                    if (problem == null) nav.openChat(sid) else snackbar.showSnackbar(problem)
+                                }
+                            },
+                        )
+                        // Delete from the header closes it, as in a normal chat.
+                        val vm = viewModel<ChatViewModel>(key = sid) { error("ChatScreen makes it") }
+                        LaunchedEffect(vm.closed) { vm.closed?.let { leaveChat(sid, it) } }
                     }
                     composable(Routes.SEARCH) {
                         SearchScreen(

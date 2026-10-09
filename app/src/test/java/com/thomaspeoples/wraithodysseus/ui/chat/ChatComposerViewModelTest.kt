@@ -2,6 +2,7 @@ package com.thomaspeoples.wraithodysseus.ui.chat
 
 import androidx.lifecycle.SavedStateHandle
 import com.thomaspeoples.wraithodysseus.chat.ChatApi
+import com.thomaspeoples.wraithodysseus.chat.UploadedFile
 import com.thomaspeoples.wraithodysseus.chat.ChatSwitch
 import com.thomaspeoples.wraithodysseus.chat.Toggles
 import com.thomaspeoples.wraithodysseus.net.Http
@@ -101,10 +102,10 @@ class ChatComposerViewModelTest {
         server.shutdown()
     }
 
-    private fun CoroutineScope.vm(canUseBash: Boolean = false) = ChatViewModel(
+    private fun CoroutineScope.vm(canUseBash: Boolean = false, saved: SavedStateHandle = SavedStateHandle()) = ChatViewModel(
         api = ChatApi(Http(FakeSession(server.url("/"), SessionCookie("abc123", Long.MAX_VALUE, secure = false)))),
         sessionId = "s1",
-        saved = SavedStateHandle(),
+        saved = saved,
         scope = this,
         jobPollMs = 10,
         canUseBash = canUseBash,
@@ -375,6 +376,22 @@ class ChatComposerViewModelTest {
         until("sent") { calls("/api/chat_stream").isNotEmpty() }
         assertEquals("hello", field(calls("/api/chat_stream").single(), "message"))
         assertEquals("s1", field(calls("/api/chat_stream").single(), "session"))
+    }
+
+    @Test
+    fun aFirstMessageCutOffByProcessDeathComesBackAsTheDraft() = runBlocking {
+        val saved = SavedStateHandle(
+            mapOf(
+                ChatViewModel.FIRST_TEXT to "hello",
+                ChatViewModel.FIRST_FILES to arrayListOf("f1", "a.txt", "text/plain"),
+            ),
+        )
+        val vm = vm(saved = saved)
+        assertEquals("hello", vm.draft)
+        assertEquals(listOf(UploadedFile("f1", "a.txt", "text/plain")), vm.attachments)
+        assertEquals(null, saved.get<String>(ChatViewModel.FIRST_TEXT))
+        until("history loaded") { !vm.loading }
+        assertTrue(calls("/api/chat_stream").isEmpty())
     }
 
     @Test

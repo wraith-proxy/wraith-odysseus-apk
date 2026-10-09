@@ -15,6 +15,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -35,6 +36,30 @@ import com.thomaspeoples.wraithodysseus.ui.theme.OdyColors
 import com.thomaspeoples.wraithodysseus.ui.theme.ThinkingShape
 
 /**
+ * Which boxes of one bubble are open, held in the chat's view model by
+ * "<owner>\n<title>". The live bubble is a different list item from the saved
+ * reply that replaces it, so its folds are handed over ([handOverFolds]) when
+ * the turn ends instead of closing again.
+ */
+internal class Folds(private val map: MutableMap<String, Boolean>, private val owner: String) {
+    fun isOpen(title: String) = map["$owner\n$title"] == true
+    fun set(title: String, open: Boolean) { map["$owner\n$title"] = open }
+}
+
+/** No provider (a bubble outside the chat list) keeps the fold state local. */
+internal val LocalFolds = compositionLocalOf<Folds?> { null }
+
+internal const val LIVE_FOLDS = "live"
+
+/** Moves the live bubble's folds to the saved reply [to]; with no reply they are dropped. */
+internal fun handOverFolds(folds: MutableMap<String, Boolean>, to: String?) {
+    folds.keys.filter { it.startsWith("$LIVE_FOLDS\n") }.forEach { key ->
+        val open = folds.remove(key)
+        if (to != null && open != null) folds["$to\n" + key.removePrefix("$LIVE_FOLDS\n")] = open
+    }
+}
+
+/**
  * A folded section like the web's sources box and tool nodes: closed until
  * tapped, a full 48dp header that TalkBack reads as a button with its state.
  * [tint] colours the title and icon (a failed tool is red). A hold on it is
@@ -49,10 +74,10 @@ internal fun Collapsible(
     trailing: String? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    // The live bubble is swapped for the saved one when a turn ends (different list keys), so an
-    // expanded box folds again at that moment; sharing state across both would need it hoisted
-    // into the turn state. Accepted: the content is unchanged and one tap reopens it.
-    var open by rememberSaveable(title) { mutableStateOf(false) }
+    val folds = LocalFolds.current
+    var local by rememberSaveable(title) { mutableStateOf(false) }
+    val open = folds?.isOpen(title) ?: local
+    val toggle = { if (folds != null) folds.set(title, !open) else local = !open }
     Column(
         modifier
             .fillMaxWidth()
@@ -64,7 +89,7 @@ internal fun Collapsible(
             Modifier
                 .fillMaxWidth()
                 .heightIn(min = 48.dp)
-                .clickable(role = Role.Button, onClickLabel = if (open) "Collapse" else "Expand") { open = !open }
+                .clickable(role = Role.Button, onClickLabel = if (open) "Collapse" else "Expand", onClick = toggle)
                 .semantics { stateDescription = if (open) "Expanded" else "Collapsed" }
                 .padding(horizontal = 10.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,

@@ -75,9 +75,23 @@ fun MemoryScreen(env: ToolEnv) {
     // Saveable so the editor survives rotation and reopens with its saved text; the memory is looked up by id.
     var editingOpen by rememberSaveable { mutableStateOf(false) }
     var editingId by rememberSaveable { mutableStateOf<String?>(null) }
-    val editing = if (editingOpen) Editing(state.memories.firstOrNull { it.id == editingId }) else null
-    var sheet by remember { mutableStateOf<Memory?>(null) }
-    var deleting by remember { mutableStateOf<Memory?>(null) }
+    val target = state.memories.firstOrNull { it.id == editingId }
+    // An edit waits for its memory to load (after process death) rather than
+    // opening blank, which would save a duplicate; a memory that is gone closes it.
+    val editing = when {
+        !editingOpen -> null
+        editingId == null -> Editing(null)
+        target != null -> Editing(target)
+        else -> null
+    }
+    LaunchedEffect(editingOpen, editingId, state.loaded, target) {
+        if (editingOpen && editingId != null && state.loaded && target == null) editingOpen = false
+    }
+    // Held by id so an open sheet or delete confirm survives rotation.
+    var sheetKey by rememberSaveable { mutableStateOf<String?>(null) }
+    var deletingKey by rememberSaveable { mutableStateOf<String?>(null) }
+    val sheet = state.memories.firstOrNull { it.id == sheetKey }
+    val deleting = state.memories.firstOrNull { it.id == deletingKey }
     val canAdd = env.status?.allows("can_manage_memory") ?: true
 
     LaunchedEffect(vm) { vm.messages.collect { snackbar.showSnackbar(it) } }
@@ -129,7 +143,7 @@ fun MemoryScreen(env: ToolEnv) {
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.fillMaxSize(),
                     ) {
-                        items(visible, key = { it.id }) { m -> MemoryCard(m, onOpen = { sheet = m }) }
+                        items(visible, key = { it.id }) { m -> MemoryCard(m, onOpen = { sheetKey = m.id }) }
                     }
                 }
             }
@@ -155,9 +169,9 @@ fun MemoryScreen(env: ToolEnv) {
         val actions = listOf(
             SheetAction("Edit", Lucide.Pencil) { editingId = m.id; editingOpen = true },
             SheetAction(if (m.pinned) "Unpin" else "Pin", Lucide.Pin) { vm.togglePin(m) },
-            SheetAction("Delete", Lucide.Trash2, destructive = true) { deleting = m },
+            SheetAction("Delete", Lucide.Trash2, destructive = true) { deletingKey = m.id },
         )
-        ActionSheet(actions, onDismiss = { sheet = null }, title = m.category)
+        ActionSheet(actions, onDismiss = { sheetKey = null }, title = m.category)
     }
     deleting?.let { m ->
         ConfirmDialog(
@@ -165,7 +179,7 @@ fun MemoryScreen(env: ToolEnv) {
             text = m.text.take(120),
             confirm = "Delete",
             onConfirm = { vm.delete(m) },
-            onDismiss = { deleting = null },
+            onDismiss = { deletingKey = null },
         )
     }
 }

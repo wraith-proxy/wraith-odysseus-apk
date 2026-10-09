@@ -127,7 +127,7 @@ fun GalleryScreen(env: ToolEnv) {
 private fun Filters(vm: GalleryViewModel) {
     LazyRow(contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         item { FilterChip(selected = vm.album == null && !vm.favoritesOnly, onClick = { vm.selectAlbum(null) }, label = { Text("All") }) }
-        item { FilterChip(selected = vm.favoritesOnly, onClick = { vm.selectFavorites(!vm.favoritesOnly) }, label = { Text("Favourites") }) }
+        item { FilterChip(selected = vm.favoritesOnly, onClick = { vm.selectFavorites(!vm.favoritesOnly) }, label = { Text("Favorites") }) }
         items(vm.albums.size) { i ->
             val a = vm.albums[i]
             FilterChip(selected = vm.album == a.id, onClick = { vm.selectAlbum(if (vm.album == a.id) null else a.id) }, label = { Text("${a.name} (${a.count})") })
@@ -148,7 +148,7 @@ private fun Grid(vm: GalleryViewModel, onOpen: (Int) -> Unit) {
         when {
             vm.items.isEmpty() && vm.loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             vm.items.isEmpty() -> Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(vm.loadError ?: if (vm.favoritesOnly) "No favourites yet." else "No photos yet.", color = Muted)
+                Text(vm.loadError ?: if (vm.favoritesOnly) "No favorites yet." else "No photos yet.", color = Muted)
                 if (vm.loadError != null) TextButton(onClick = vm::refresh) { Text("Retry") }
             }
             else -> LazyVerticalGrid(
@@ -171,7 +171,7 @@ private fun Tile(vm: GalleryViewModel, img: GalleryImage, onClick: () -> Unit) {
     Box(Modifier.aspectRatio(1f).background(MaterialTheme.colorScheme.surfaceVariant).clickable(onClick = onClick)) {
         Photo(vm, img, THUMB_PX, ContentScale.Crop, Modifier.fillMaxSize())
         if (img.favorite) {
-            Icon(Lucide.Heart, "Favourite", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.align(Alignment.BottomEnd).padding(4.dp).size(16.dp))
+            Icon(Lucide.Heart, "Favorite", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.align(Alignment.BottomEnd).padding(4.dp).size(16.dp))
         }
     }
 }
@@ -209,7 +209,7 @@ private fun Viewer(vm: GalleryViewModel, start: Int, onClose: () -> Unit, onDele
                 IconButton(onClick = { vm.toggleFavorite(img) }, enabled = img.id !in vm.busy) {
                     Icon(
                         Lucide.Heart,
-                        if (img.favorite) "Remove from favourites" else "Add to favourites",
+                        if (img.favorite) "Remove from favorites" else "Add to favorites",
                         tint = if (img.favorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                     )
                 }

@@ -99,8 +99,11 @@ fun NotesScreen(env: ToolEnv) {
     // Kept as an id so it survives rotation: "" is a new note, null is no editor.
     var editingId by rememberSaveable { mutableStateOf<String?>(null) }
     val editing = editingId?.let { id -> if (id.isEmpty()) Editing(null) else state.notes.firstOrNull { it.id == id }?.let(::Editing) }
-    var sheet by remember { mutableStateOf<Note?>(null) }
-    var deleting by remember { mutableStateOf<Note?>(null) }
+    // Held by id so an open sheet or delete confirm survives rotation.
+    var sheetKey by rememberSaveable { mutableStateOf<String?>(null) }
+    var deletingKey by rememberSaveable { mutableStateOf<String?>(null) }
+    val sheet = state.notes.firstOrNull { it.id == sheetKey }
+    val deleting = state.notes.firstOrNull { it.id == deletingKey }
     var now by remember { mutableStateOf(Instant.now()) }
 
     LaunchedEffect(vm) { vm.messages.collect { snackbar.showSnackbar(it) } }
@@ -183,7 +186,7 @@ fun NotesScreen(env: ToolEnv) {
                             modifier = Modifier.fillMaxSize(),
                         ) {
                             items(visible, key = { it.id }) { n ->
-                                NoteCard(n, now, openNote, { sheet = n }, vm::toggleItem)
+                                NoteCard(n, now, openNote, { sheetKey = n.id }, vm::toggleItem)
                             }
                         }
                         else -> LazyColumn(
@@ -192,7 +195,7 @@ fun NotesScreen(env: ToolEnv) {
                             modifier = Modifier.fillMaxSize(),
                         ) {
                             items(visible, key = { it.id }) { n ->
-                                NoteCard(n, now, openNote, { sheet = n }, vm::toggleItem)
+                                NoteCard(n, now, openNote, { sheetKey = n.id }, vm::toggleItem)
                             }
                         }
                     }
@@ -215,9 +218,9 @@ fun NotesScreen(env: ToolEnv) {
                 add(SheetAction(if (n.archived) "Restore" else "Archive", if (n.archived) Lucide.ArchiveRestore else Lucide.Archive) { vm.toggleArchive(n) })
                 if (state.canReorder && order.indexOf(n.id) > 0) add(SheetAction("Move up", Lucide.ChevronUp) { vm.move(n, -1, now) })
                 if (state.canReorder && order.indexOf(n.id) in 0 until order.size - 1) add(SheetAction("Move down", Lucide.ChevronDown) { vm.move(n, 1, now) })
-                add(SheetAction("Delete", Lucide.Trash2, destructive = true) { deleting = n })
+                add(SheetAction("Delete", Lucide.Trash2, destructive = true) { deletingKey = n.id })
             }
-            ActionSheet(actions, onDismiss = { sheet = null }, title = n.title.ifBlank { "Note" })
+            ActionSheet(actions, onDismiss = { sheetKey = null }, title = n.title.ifBlank { "Note" })
         }
         deleting?.let { n ->
             ConfirmDialog(
@@ -225,7 +228,7 @@ fun NotesScreen(env: ToolEnv) {
                 text = n.title.ifBlank { "This note" } + " will be removed for good.",
                 confirm = "Delete",
                 onConfirm = { vm.delete(n) },
-                onDismiss = { deleting = null },
+                onDismiss = { deletingKey = null },
             )
         }
     }
