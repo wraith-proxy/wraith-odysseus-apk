@@ -42,6 +42,7 @@ import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.thomaspeoples.wraithodysseus.ui.theme.AppPalette
 import com.thomaspeoples.wraithodysseus.ui.theme.CodeStyle
 import com.thomaspeoples.wraithodysseus.ui.theme.Muted
 import com.thomaspeoples.wraithodysseus.ui.theme.OdyColors
@@ -135,8 +136,8 @@ fun parsePipeTable(lines: List<String>): MdTable? {
 }
 
 private val parser: Parser = Parser.builder().build()
-private val InlineCode = SpanStyle(background = OdyColors.CodeBg, color = OdyColors.CodeFg, fontSize = 12.sp)
-private val LinkStyles = TextLinkStyles(SpanStyle(color = Primary, textDecoration = TextDecoration.Underline))
+private val InlineCode get() = SpanStyle(background = OdyColors.CodeBg, color = OdyColors.CodeFg, fontSize = 12.sp)
+private val LinkStyles get() = TextLinkStyles(SpanStyle(color = Primary, textDecoration = TextDecoration.Underline))
 
 fun markdownBlocks(markdown: String): List<MdBlock> = MdRenderer().apply { block(parser.parse(markdown), 0, false) }.finish()
 
@@ -252,7 +253,8 @@ private class MdRenderer {
 
 @Composable
 fun Markdown(text: String, modifier: Modifier = Modifier, color: Color = MaterialTheme.colorScheme.onSurface) {
-    val blocks = remember(text) { markdownBlocks(text) }
+    // Keyed on the palette too: inline code and link colours are baked into the spans.
+    val blocks = remember(text, AppPalette.current) { markdownBlocks(text) }
     val context = LocalContext.current
     val snackbar = LocalSnackbar.current
     val scope = rememberCoroutineScope()

@@ -1,0 +1,5 @@
+{"key": "custom-themes", "value": {
+  "mine": {"bg": "#101820", "fg": "#f2aa4c", "panel": "#0a1016", "border": "#2a3a4a", "red": "#f2aa4c", "font": "sans", "density": "compact", "bgPattern": "dots", "frosted": true, "advanced": {"userBubbleBg": "#223344", "codeBg": "nope"}},
+  "broken": {"bg": "red", "fg": "#ffffff", "panel": "#000000", "border": "#111111"},
+  "scalar": 5
+}}

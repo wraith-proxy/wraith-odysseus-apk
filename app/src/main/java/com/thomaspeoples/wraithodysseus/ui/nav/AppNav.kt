@@ -68,6 +68,9 @@ import com.thomaspeoples.wraithodysseus.ui.sessions.ArchivedController
 import com.thomaspeoples.wraithodysseus.ui.sessions.ArchivedScreen
 import com.thomaspeoples.wraithodysseus.ui.sessions.ChatListController
 import com.thomaspeoples.wraithodysseus.ui.settings.AccountScreen
+import com.thomaspeoples.wraithodysseus.ui.settings.PrefsApi
+import com.thomaspeoples.wraithodysseus.ui.theme.AppPalette
+import com.thomaspeoples.wraithodysseus.ui.theme.syncTheme
 import com.thomaspeoples.wraithodysseus.ui.settings.SettingsScreen
 import com.thomaspeoples.wraithodysseus.ui.tools.Tool
 import com.thomaspeoples.wraithodysseus.ui.tools.ToolEnv
@@ -180,6 +183,11 @@ fun AppNav() {
             status = null
             drawer.snapTo(DrawerValue.Closed)
         }
+    }
+
+    // The account's theme, once logged in; the next account never sees it.
+    LaunchedEffect(loggedIn) {
+        if (loggedIn) syncTheme(PrefsApi(app.http)) else AppPalette.reset()
     }
 
     suspend fun refreshSessions() {

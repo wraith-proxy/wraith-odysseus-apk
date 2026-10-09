@@ -63,6 +63,7 @@ fun SettingsScreen(
             }
             HorizontalDivider(color = OdyColors.BubbleBorder.copy(alpha = 0.4f))
             SettingsRow(Lucide.User, "Account", onClick = onAccount)
+            PrefsSection(status)
             SettingsRow(Lucide.Info, stringResource(R.string.menu_about), onClick = onAbout)
             SettingsRow(Lucide.FileText, stringResource(R.string.menu_faq), onClick = onFaq)
             SettingsRow(Lucide.LogOut, stringResource(R.string.menu_logout), color = MaterialTheme.colorScheme.error, onClick = onLogout)
