@@ -5,6 +5,8 @@ import androidx.compose.runtime.saveable.SaverScope
 import androidx.lifecycle.SavedStateHandle
 import com.thomaspeoples.wraithodysseus.chat.ChatApi
 import com.thomaspeoples.wraithodysseus.chat.ModelChoice
+import com.thomaspeoples.wraithodysseus.chat.Speech
+import com.thomaspeoples.wraithodysseus.chat.SpeechOutput
 import com.thomaspeoples.wraithodysseus.chat.Toggles
 import com.thomaspeoples.wraithodysseus.chat.UploadedFile
 import com.thomaspeoples.wraithodysseus.net.Http
@@ -16,7 +18,9 @@ import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.job
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import okhttp3.HttpUrl
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
@@ -52,6 +56,15 @@ class ChatViewModelTest {
     @Volatile private var resume = MockResponse().setResponseCode(404)
     @Volatile private var resumeGate = CountDownLatch(0)
 
+    /** What GET /api/research/chat-jobs answers, one entry per poll; the last repeats. */
+    private val jobAnswers: MutableList<String> = Collections.synchronizedList(mutableListOf())
+    private val jobPolls = java.util.concurrent.atomic.AtomicInteger()
+    /** Delivering a job saves a reply: the rows grow when this poll count is reached. */
+    @Volatile private var deliverAtPoll = Int.MAX_VALUE
+    @Volatile private var ttsStats = """{"available":true,"ready":true,"provider":"local"}"""
+    @Volatile private var synthesize = MockResponse().setHeader("Content-Type", "audio/mpeg").setBody("ID3")
+    private val synthBodies: MutableList<String> = Collections.synchronizedList(mutableListOf())
+
     private fun fixture(name: String) =
         checkNotNull(javaClass.classLoader?.getResource("fixtures/$name")) { name }.readText()
 
@@ -64,6 +77,16 @@ class ChatViewModelTest {
                 "/api/models" -> return MockResponse().setBody("""{"items":[]}""")
                 "/api/upload" -> return MockResponse().setBody(fixture("upload.json"))
                 "/api/chat_stream" -> return chatStream
+                "/api/research/chat-jobs/s1" -> {
+                    val n = jobPolls.incrementAndGet()
+                    if (n >= deliverAtPoll) total = 82
+                    return MockResponse().setBody(if (jobAnswers.size > 1) jobAnswers.removeAt(0) else jobAnswers.firstOrNull() ?: """{"jobs":[]}""")
+                }
+                "/api/tts/stats" -> return MockResponse().setBody(ttsStats)
+                "/api/tts/synthesize" -> {
+                    synthBodies += request.body.readUtf8()
+                    return synthesize
+                }
                 "/api/chat/resume/s1" -> {
                     resumeGate.await(10, TimeUnit.SECONDS)
                     return resume
@@ -100,12 +123,31 @@ class ChatViewModelTest {
     @After
     fun tearDown() = server.shutdown()
 
-    private fun CoroutineScope.vm() = ChatViewModel(
+    private fun CoroutineScope.vm(speech: SpeechOutput? = null) = ChatViewModel(
         api = ChatApi(Http(FakeSession(server.url("/"), SessionCookie("abc123", Long.MAX_VALUE, secure = false)))),
         sessionId = "s1",
         saved = SavedStateHandle(),
         scope = this,
+        speech = speech,
+        jobPollMs = 10,
     )
+
+    private class FakeSpeech : SpeechOutput {
+        val played = mutableListOf<Speech>()
+        var stops = 0
+        var ended: (() -> Unit)? = null
+        override suspend fun play(speech: Speech, onEnd: () -> Unit) {
+            played += speech
+            ended = onEnd
+        }
+        override fun stop() {
+            stops++
+        }
+    }
+
+    private fun job(status: String, extra: String = "") =
+        """{"jobs":[{"id":"job1","tool":"research","query":"cats","status":"$status","rounds":2$extra}]}"""
+
 
     private suspend fun CoroutineScope.settle() = coroutineContext.job.children.forEach { it.join() }
 
@@ -266,5 +308,170 @@ class ChatViewModelTest {
         val files = listOf(UploadedFile("f-1", "cat.png", "image/png"), UploadedFile("f-2", "notes.txt", "text/plain"))
         assertEquals(files, roundTrip(ChatViewModel.FilesSaver, files))
         assertNull(roundTrip(ChatViewModel.FilesSaver, emptyList()))
+    }
+
+    // -- background replies -------------------------------------------------
+
+    @Test
+    fun aRunningJobIsPolledUntilItIsDeliveredThenTheReplyIsLoaded() = runBlocking {
+        val vm = vm()
+        settle()
+        assertEquals("m-79", vm.messages.last().dbId)
+        jobAnswers += job("running", ""","progress":{"phase":"searching","round":1,"total_sources":2}""")
+        jobAnswers += job("running")
+        jobAnswers += job("ready")
+        jobAnswers += job("delivered", ""","source_count":5,"outcome":"complete"""")
+        deliverAtPoll = 4
+        val reloads = historyPaths.size
+
+        vm.onResume()
+        // The first resume does not reload: opening the chat just did.
+        settle()
+
+        assertEquals(4, jobPolls.get())
+        // Polling stopped by itself: nothing is running any more.
+        delay(60)
+        assertEquals(4, jobPolls.get())
+        assertEquals("job1", vm.jobs.single().id)
+        assertEquals("delivered", vm.jobs.single().status)
+        // One reload, after the job left running/ready, brought the reply in.
+        assertEquals(reloads + 1, historyPaths.size)
+        assertEquals("m-81", vm.messages.last().dbId)
+    }
+
+    @Test
+    fun aJobStartedByAMessageSentHereIsPolledAndItsReplyLoaded() = runBlocking {
+        val vm = vm()
+        settle()
+        // Not resumed again: only the send's run end can start the watch.
+        chatStream = MockResponse().setHeader("Content-Type", "text/event-stream")
+            .setHeader("X-Odysseus-Run-Id", "run-1").setBody(fixture("sse_chat_basic.txt"))
+        jobAnswers += job("running")
+        jobAnswers += job("delivered", ""","source_count":5,"outcome":"complete"""")
+        deliverAtPoll = 2
+        vm.draft = "research x"
+        vm.send()
+        while (vm.running) delay(10)
+        settle()
+        delay(60)
+        assertEquals(2, jobPolls.get())
+        assertEquals("delivered", vm.jobs.single().status)
+        assertEquals("m-81", vm.messages.last().dbId)
+    }
+
+    @Test
+    fun noJobsMeansOneAskAndNoReload() = runBlocking {
+        val vm = vm()
+        settle()
+        val reloads = historyPaths.size
+        vm.onResume()
+        settle()
+        assertEquals(1, jobPolls.get())
+        assertEquals(reloads, historyPaths.size)
+        assertTrue(vm.jobs.isEmpty())
+    }
+
+    @Test
+    fun leavingTheScreenStopsThePolling() = runBlocking {
+        val vm = vm()
+        settle()
+        jobAnswers += job("running")
+        vm.onResume()
+        delay(80)
+        assertTrue(jobPolls.get() >= 2)
+        vm.onPause()
+        settle()
+        val polls = jobPolls.get()
+        delay(80)
+        assertEquals(polls, jobPolls.get())
+        // Coming back asks again.
+        vm.onResume()
+        delay(40)
+        assertTrue(jobPolls.get() > polls)
+        vm.onPause()
+        settle()
+    }
+
+    @Test
+    fun aDiscardedJobIsNotShownOrWaitedFor() = runBlocking {
+        val vm = vm()
+        settle()
+        jobAnswers += job("discarded")
+        vm.onResume()
+        settle()
+        assertEquals(1, jobPolls.get())
+        assertTrue(vm.jobs.isEmpty())
+    }
+
+    @Test
+    fun resumingBringsInNewRowsWithoutLosingEarlierPages() = runBlocking {
+        val vm = vm()
+        settle()
+        vm.loadOlder()
+        settle()
+        assertEquals((0 until 80).map { "m-$it" }, vm.messages.map { it.dbId })
+        vm.onResume()
+        vm.onPause()
+        settle()
+        // A background reply was saved meanwhile.
+        total = 82
+        vm.onResume()
+        settle()
+        assertEquals((0 until 82).map { "m-$it" }, vm.messages.map { it.dbId })
+        assertFalse(vm.hasOlder)
+        vm.onPause()
+    }
+
+    // -- read aloud ----------------------------------------------------------
+
+    @Test
+    fun readAloudSendsTheVisibleTextAndTappingAgainStops() = runBlocking {
+        val speech = FakeSpeech()
+        val vm = vm(speech)
+        settle()
+        assertTrue(vm.ttsEnabled)
+        val reply = vm.messages.last()
+
+        vm.readAloud(reply)
+        settle()
+        assertEquals(1, speech.played.size)
+        assertEquals("ID3", String(speech.played.single().bytes))
+        assertEquals("audio/mpeg", speech.played.single().mime)
+        assertEquals("message 79", JSONObject(synthBodies.single()).getString("text"))
+        assertEquals("m-79", vm.speaking)
+
+        // Tapping again while it plays stops it.
+        val stops = speech.stops
+        vm.readAloud(reply)
+        assertNull(vm.speaking)
+        assertEquals(stops + 1, speech.stops)
+
+        // It ends by itself when the audio does.
+        vm.readAloud(reply)
+        settle()
+        assertEquals("m-79", vm.speaking)
+        speech.ended!!.invoke()
+        assertNull(vm.speaking)
+    }
+
+    @Test
+    fun readAloudNeedsAnEnabledServerAndReportsFailure() = runBlocking {
+        ttsStats = """{"available":false,"ready":false,"provider":"local"}"""
+        val off = vm(FakeSpeech())
+        settle()
+        assertFalse(off.ttsEnabled)
+        assertFalse(vm().ttsEnabled)
+        settle()
+
+        ttsStats = """{"available":true,"ready":true,"provider":"local"}"""
+        synthesize = MockResponse().setResponseCode(503).setBody("""{"detail":{"message":"TTS service not available"}}""")
+        val speech = FakeSpeech()
+        val vm = vm(speech)
+        settle()
+        vm.readAloud(vm.messages.last())
+        settle()
+        assertEquals("TTS service not available", withTimeout(2_000) { vm.notices.first() })
+        assertNull(vm.speaking)
+        assertTrue(speech.played.isEmpty())
     }
 }

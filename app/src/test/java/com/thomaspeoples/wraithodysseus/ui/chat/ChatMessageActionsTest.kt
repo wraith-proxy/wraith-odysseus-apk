@@ -32,7 +32,7 @@ class ChatMessageActionsTest {
 
     private class FakeSession(override var baseUrl: HttpUrl?, override var cookie: SessionCookie?) : SessionState
 
-    private class Row(val id: String, val role: String, var content: String, val hidden: Boolean = false)
+    private class Row(val id: String, val role: String, var content: String, val hidden: Boolean = false, val meta: JSONObject = JSONObject())
 
     private fun fixture(name: String) =
         checkNotNull(javaClass.classLoader?.getResource("fixtures/$name")) { name }.readText()
@@ -56,6 +56,8 @@ class ChatMessageActionsTest {
     /** Overrides for single endpoints. */
     @Volatile private var truncate: MockResponse? = null
     @Volatile private var chatStream: MockResponse? = null
+    /** What a finished chat_stream saves: the user's message and this reply (null: nothing is saved). */
+    @Volatile private var savedReply: String? = null
 
     private fun reply(r: MockResponse?, otherwise: () -> MockResponse) = r ?: otherwise()
 
@@ -72,6 +74,11 @@ class ChatMessageActionsTest {
                 path == "/api/models" -> MockResponse().setBody("""{"items":[]}""")
                 path.startsWith("/api/chat/resume") -> MockResponse().setResponseCode(404).setBody(fixture("chat_resume_404.json"))
                 path == "/api/chat_stream" -> reply(chatStream) {
+                    savedReply?.let {
+                        val sent = Regex("""name="message"\r\n(?:Content-[^\r]*\r\n)*\r\n([^\r]*)""").find(body)!!.groupValues[1]
+                        rows += Row("n-user", "user", sent)
+                        rows += Row("n-reply", "assistant", it)
+                    }
                     MockResponse().setHeader("Content-Type", "text/event-stream").setHeader("X-Odysseus-Run-Id", "run-1")
                         .setBody(fixture("sse_chat_basic.txt"))
                 }
@@ -95,6 +102,26 @@ class ChatMessageActionsTest {
                     rows.first { it.id == b.getString("msg_id") }.content = b.getString("content")
                     MockResponse().setBody(fixture("edit_message_ok.json"))
                 }
+                path.endsWith("/update-last-meta") -> {
+                    val update = JSONObject(body).getJSONObject("metadata")
+                    val target = rows.last { it.role == "assistant" && !it.hidden }
+                    update.keys().forEach { k -> target.meta.put(k, update.get(k)) }
+                    MockResponse().setBody("""{"status":"ok"}""")
+                }
+                path.endsWith("/merge-last-assistant") -> {
+                    // history_routes.py:688: the continue marker must sit directly between two replies.
+                    val ai = rows.indices.filter { rows[it].role == "assistant" && !rows[it].hidden }
+                    val (a, b) = ai.takeLast(2)
+                    if (b - a != 2 || !rows[a + 1].content.startsWith("Continue from where you left off")) {
+                        MockResponse().setBody("""{"status":"ok","merged":false,"reason":"no_continue_marker"}""")
+                    } else {
+                        rows[a].content = rows[a].content + JSONObject(body).getString("separator") + rows[b].content
+                        rows[a].meta.remove("stopped")
+                        rows.removeAt(b)
+                        rows.removeAt(a + 1)
+                        MockResponse().setBody("""{"status":"ok","merged":true}""")
+                    }
+                }
                 path.endsWith("/fork") -> MockResponse().setBody(fixture("fork_ok.json"))
                 path == "/api/rewrite" -> {
                     // chat_routes.py:5096-5121: the last assistant row takes the new text.
@@ -112,7 +139,8 @@ class ChatMessageActionsTest {
         val snapshot = rows.toList()
         val offset = (url.queryParameter("offset")?.toInt() ?: maxOf(snapshot.size - limit, 0)).coerceIn(0, snapshot.size)
         val page = snapshot.subList(offset, minOf(offset + limit, snapshot.size)).filter { !it.hidden }.map {
-            JSONObject().put("role", it.role).put("content", it.content).put("metadata", JSONObject().put("_db_id", it.id))
+            JSONObject().put("role", it.role).put("content", it.content)
+                .put("metadata", JSONObject(it.meta.toString()).put("_db_id", it.id))
         }
         return MockResponse().setBody(
             JSONObject().put("history", JSONArray(page)).put("offset", offset).put("total", snapshot.size)
@@ -343,5 +371,167 @@ class ChatMessageActionsTest {
         vm.fork(unsaved) {}
         settle()
         assertEquals(emptyList<String>(), actionRequests())
+    }
+
+    // -- variants, markers, continue ---------------------------------------
+
+    @Test
+    fun regenerateKeepsTheOldReplyAsAVersionOnTheNewOne() = runBlocking {
+        val vm = vm()
+        settle()
+        savedReply = "A2 again"
+        vm.regenerate(vm.msg("m-4"))
+        settle()
+
+        assertEquals(
+            listOf("/api/session/s1/truncate", "/api/chat_stream", "/api/session/s1/update-last-meta"),
+            actionRequests(),
+        )
+        val meta = JSONObject(bodies.getValue("/api/session/s1/update-last-meta")).getJSONObject("metadata")
+        val kept = meta.getJSONArray("variants")
+        assertEquals(listOf("A2", "A2 again"), (0 until 2).map { kept.getJSONObject(it).getString("raw") })
+        assertEquals(listOf("original", "regen"), (0 until 2).map { kept.getJSONObject(it).getString("label") })
+        assertEquals(1, meta.getInt("variantIndex"))
+
+        val shown = vm.msg("n-reply")
+        assertEquals("A2 again", shown.content)
+        assertEquals(2, shown.details.variants.size)
+        assertEquals(1, shown.details.shownVariant)
+    }
+
+    @Test
+    fun anotherRegenerateAddsToTheVersionsAlreadyKept() = runBlocking {
+        // The server's state after one regenerate: two versions, the newest on show.
+        rows.removeAt(rows.lastIndex)
+        rows += Row(
+            "m-4", "assistant", "second",
+            meta = JSONObject("""{"variants":[{"raw":"A2","label":"original"},{"raw":"second","label":"regen"}],"variantIndex":1}"""),
+        )
+        val vm = vm()
+        settle()
+        savedReply = "third"
+        vm.regenerate(vm.msg("m-4"))
+        settle()
+        val kept = JSONObject(bodies.getValue("/api/session/s1/update-last-meta")).getJSONObject("metadata").getJSONArray("variants")
+        assertEquals(listOf("A2", "second", "third"), (0 until 3).map { kept.getJSONObject(it).getString("raw") })
+        assertEquals(listOf("original", "regen", "regen"), (0 until 3).map { kept.getJSONObject(it).getString("label") })
+    }
+
+    @Test
+    fun switchingVersionsSavesTheChoiceAndShowsTheText() = runBlocking {
+        val vm = vm()
+        settle()
+        savedReply = "A2 again"
+        vm.regenerate(vm.msg("m-4"))
+        settle()
+        requests.clear()
+
+        vm.switchVariant(vm.msg("n-reply"), 0)
+        settle()
+        assertEquals(listOf("/api/session/s1/update-last-meta"), actionRequests())
+        assertEquals("""{"metadata":{"variantIndex":0}}""", bodies.getValue("/api/session/s1/update-last-meta"))
+        assertEquals("A2", vm.msg("n-reply").content)
+        assertEquals(0, vm.msg("n-reply").details.shownVariant)
+
+        // Out of range, or not the last reply: nothing is asked.
+        requests.clear()
+        vm.switchVariant(vm.msg("n-reply"), 5)
+        vm.switchVariant(vm.msg("m-2"), 0)
+        settle()
+        assertEquals(emptyList<String>(), actionRequests())
+
+        vm.switchVariant(vm.msg("n-reply"), 1)
+        settle()
+        assertEquals("A2 again", vm.msg("n-reply").content)
+    }
+
+    @Test
+    fun aRefusedSwitchPutsTheOldVersionBack() = runBlocking {
+        val vm = vm()
+        settle()
+        savedReply = "A2 again"
+        vm.regenerate(vm.msg("m-4"))
+        settle()
+        val before = vm.msg("n-reply")
+        rows.last { it.id == "n-reply" }.meta.put("variantIndex", 1)
+        // The server is gone for update-last-meta only.
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest) =
+                if (request.path!!.endsWith("/update-last-meta")) MockResponse().setResponseCode(500).setBody("""{"detail":"boom"}""")
+                else odysseus.dispatch(request)
+        }
+        vm.switchVariant(before, 0)
+        settle()
+        assertEquals("boom", vm.notice())
+        assertEquals("A2 again", vm.msg("n-reply").content)
+    }
+
+    @Test
+    fun editingMarksTheReplyEditedAndDropsItsVersions() = runBlocking {
+        val vm = vm()
+        settle()
+        vm.edit(vm.msg("m-4"), "A2 fixed")
+        settle()
+        assertTrue(vm.msg("m-4").details.edited)
+    }
+
+    @Test
+    fun continueSendsTheContinueTurnThenMergesTheTwoReplies() = runBlocking {
+        rows.last { it.id == "m-4" }.meta.put("stopped", true)
+        val vm = vm()
+        settle()
+        // The stopped marker comes from history.
+        assertTrue(vm.msg("m-4").details.stopped)
+
+        savedReply = "and the rest"
+        requests.clear()
+        vm.continueReply(vm.msg("m-4"))
+        settle()
+
+        assertEquals(listOf("/api/chat_stream", "/api/session/s1/merge-last-assistant"), actionRequests())
+        assertTrue(bodies.getValue("/api/chat_stream").contains("Continue from where you left off."))
+        assertEquals("\n\n*(continued)*\n\n", JSONObject(bodies.getValue("/api/session/s1/merge-last-assistant")).getString("separator"))
+        val joined = vm.msg("m-4")
+        assertEquals("A2\n\n*(continued)*\n\nand the rest", joined.content)
+        assertFalse(joined.details.stopped)
+        // No stray rows: the continue marker and the second reply are gone.
+        assertEquals(listOf("m-1", "m-2", "m-3", "m-4"), vm.messages.map { it.dbId })
+    }
+
+    @Test
+    fun continueIsOnlyForAStoppedLastReplyWithText() = runBlocking {
+        val plain = vm()
+        settle()
+        // Not stopped.
+        plain.continueReply(plain.msg("m-4"))
+        settle()
+        assertEquals(emptyList<String>(), actionRequests())
+
+        // Stopped but not the last reply; the last one was cancelled before any text.
+        rows.first { it.id == "m-2" }.meta.put("stopped", true)
+        rows.last { it.id == "m-4" }.meta.put("stopped", true).put("cancelled", true)
+        val vm = vm()
+        settle()
+        vm.continueReply(vm.msg("m-2"))
+        vm.continueReply(vm.msg("m-4"))
+        settle()
+        assertEquals(emptyList<String>(), actionRequests())
+    }
+
+    @Test
+    fun aMergeTheServerRefusesIsReportedAndTheReloadStillHappens() = runBlocking {
+        rows.last { it.id == "m-4" }.meta.put("stopped", true)
+        val vm = vm()
+        settle()
+        savedReply = "more"
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest) =
+                if (request.path!!.endsWith("/merge-last-assistant")) MockResponse().setResponseCode(500).setBody("""{"detail":"boom"}""")
+                else odysseus.dispatch(request)
+        }
+        vm.continueReply(vm.msg("m-4"))
+        settle()
+        assertEquals("boom", vm.notice())
+        assertEquals("more", vm.messages.last().content)
     }
 }

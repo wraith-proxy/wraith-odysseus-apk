@@ -45,6 +45,8 @@ import com.thomaspeoples.wraithodysseus.ui.chat.parts.DetailsFooter
 import com.thomaspeoples.wraithodysseus.ui.chat.parts.FindingsBox
 import com.thomaspeoples.wraithodysseus.ui.chat.parts.GeneratedImages
 import com.thomaspeoples.wraithodysseus.ui.chat.parts.MessageHeader
+import com.thomaspeoples.wraithodysseus.ui.chat.parts.ReplyMarkers
+import com.thomaspeoples.wraithodysseus.ui.chat.parts.VariantSwitcher
 import com.thomaspeoples.wraithodysseus.ui.chat.parts.RagBox
 import com.thomaspeoples.wraithodysseus.ui.chat.parts.SourcesBox
 import com.thomaspeoples.wraithodysseus.ui.chat.parts.ToolCardView
@@ -157,6 +159,7 @@ internal fun MessageItem(
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { m.attachments.forEach { Thumb(it, thumbnail) } }
                 }
                 Text(m.content, style = MaterialTheme.typography.bodyMedium)
+                ReplyMarkers(d, user = true, onContinue = null)
             } else {
                 if (m.attachments.isNotEmpty()) {
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { m.attachments.forEach { Thumb(it, thumbnail) } }
@@ -171,7 +174,11 @@ internal fun MessageItem(
                     answer = m.content,
                     placeholder = false,
                 )
+                ReplyMarkers(d, user = false, onContinue = menu?.let { mm -> mm.onContinue?.takeIf { mm.canChange && mm.lastReply } })
             }
+        }
+        if (!user && d.variants.size > 1) {
+            VariantSwitcher(d, enabled = menu?.canChange == true && menu.lastReply, onSwitch = { menu?.onVariant?.invoke(it) })
         }
         if (!user) DetailsFooter(d)
         MessageFooter(user, canChange = menu?.canChange == true, onAction = runner::run, onMore = { layer = Layer.More })

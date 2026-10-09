@@ -97,6 +97,9 @@ class RunStream(val runId: String?, val events: Flow<SseEvent>)
 
 data class UploadedFile(val id: String, val name: String, val mime: String)
 
+/** Synthesized speech: [mime] is audio/mpeg or audio/wav. */
+class Speech(val bytes: ByteArray, val mime: String)
+
 /** An item of GET /api/search (a bare array). */
 data class SearchHit(
     val messageId: String,
@@ -291,6 +294,53 @@ class ChatApi(private val http: Http) {
         return stripRewriteThinking(text.toString()).ifEmpty { throw ApiException(502, "The model returned no rewritten text") }
     }
 
+    /**
+     * history_routes.py:637: merges [metadata] into the LAST assistant row,
+     * so callers use it only for the last reply. The web keeps a reply's
+     * earlier versions (chat.js:7216) and which one is on show this way.
+     * Setting the same keys twice is harmless, so it may retry.
+     */
+    suspend fun updateLastMeta(sessionId: String, metadata: JSONObject) {
+        val body = JSONObject().put("metadata", metadata)
+        http.call(post("/api/session/${seg(sessionId)}/update-last-meta", jsonBody(body)))
+    }
+
+    /**
+     * history_routes.py:688: after a "continue" turn, joins the last two
+     * assistant rows (the stopped reply and its continuation) with
+     * [separator] and drops the hidden "continue" user row between them.
+     * False when the server found nothing to join (it only joins rows with
+     * the continue marker directly between). Not retried.
+     */
+    suspend fun mergeLastAssistant(sessionId: String, separator: String): Boolean {
+        val body = JSONObject().put("separator", separator)
+        val request = post("/api/session/${seg(sessionId)}/merge-last-assistant", jsonBody(body))
+        return JSONObject(http.call(request, retry = false)).optBoolean("merged", false)
+    }
+
+    /** research_routes.py:645. Every background job of the chat, oldest first. */
+    suspend fun researchJobs(sessionId: String): List<ResearchJob> =
+        parseJobs(JSONObject(http.call(get("/api/research/chat-jobs/${seg(sessionId)}"))))
+
+    /** GET /api/tts/stats (tts_routes.py:19): whether reading aloud can work from the app. */
+    suspend fun ttsEnabled(): Boolean = parseTtsEnabled(JSONObject(http.call(get("/api/tts/stats"))))
+
+    /**
+     * POST /api/tts/synthesize (tts_routes.py:27) with the format "audio":
+     * the spoken text as MP3 or WAV bytes. The server cuts the text at 5000
+     * characters. A failure is an ApiException carrying the server's message.
+     */
+    suspend fun synthesize(text: String): Speech {
+        val body = JSONObject().put("text", text).put("format", "audio")
+        return withContext(Dispatchers.IO) {
+            http.open(post("/api/tts/synthesize", jsonBody(body)), Http.STREAM_TIMEOUT_S).use { r ->
+                val bytes = r.body?.bytes() ?: ByteArray(0)
+                if (bytes.isEmpty()) throw ApiException(502, "The server returned no audio")
+                Speech(bytes, r.header("Content-Type")?.substringBefore(';')?.trim()?.ifBlank { null } ?: "audio/mpeg")
+            }
+        }
+    }
+
     suspend fun search(query: String, limit: Int = 25): List<SearchHit> {
         val url = http.url("/api/search").newBuilder()
             .addQueryParameter("q", query)
@@ -362,6 +412,34 @@ class ChatApi(private val http: Http) {
             }
         }
 
+        internal fun parseJobs(root: JSONObject): List<ResearchJob> {
+            val arr = root.optJSONArray("jobs") ?: return emptyList()
+            return (0 until arr.length()).mapNotNull { arr.optJSONObject(it) }.mapNotNull { o ->
+                val progress = o.optJSONObject("progress")
+                ResearchJob(
+                    id = o.str("id") ?: return@mapNotNull null,
+                    tool = o.str("tool").orEmpty(),
+                    query = o.str("query").orEmpty(),
+                    status = o.str("status").orEmpty(),
+                    rounds = o.optInt("rounds", 0).takeIf { it > 0 },
+                    sourceCount = if (o.has("source_count")) o.optInt("source_count") else null,
+                    outcome = o.str("outcome"),
+                    phase = progress?.str("phase"),
+                    round = progress?.optInt("round", 0)?.takeIf { it > 0 },
+                    totalSources = if (progress?.has("total_sources") == true) progress.optInt("total_sources") else null,
+                )
+            }
+        }
+
+        /**
+         * Reading aloud needs audio the server makes: "browser" is the web's
+         * own speech engine (synthesize refuses it) and "disabled" is off.
+         * `available` already folds in the user's tts_enabled setting.
+         */
+        internal fun parseTtsEnabled(o: JSONObject): Boolean =
+            o.optBoolean("available", false) && o.optBoolean("ready", false) &&
+                o.str("provider").orEmpty().let { it.isNotEmpty() && it != "browser" && it != "disabled" }
+
         internal fun parseModels(root: JSONObject): List<ModelChoice> {
             val items = root.optJSONArray("items") ?: return emptyList()
             return (0 until items.length()).map(items::getJSONObject)
@@ -413,15 +491,23 @@ class ChatApi(private val http: Http) {
                     val split = if (role == "assistant") splitThinking(shown) else Split(shown, "")
                     val thinking = listOfNotNull(meta?.str("thinking"), split.thinking.ifBlank { null })
                         .joinToString("\n").ifBlank { null }
-                    HistoryMessage(
+                    // The web (chatRenderer.js:3722) shows the chosen kept version
+                    // in place of the stored text. An edit is saved over the
+                    // stored text only, so an edited reply shows that instead.
+                    val parsed = parseDetails(meta)
+                    val details = if (parsed.edited || parsed.variants.size < 2) parsed.copy(variants = emptyList()) else parsed
+                    val row = HistoryMessage(
                         role = role,
                         content = split.answer,
                         dbId = meta?.str("_db_id"),
                         thinking = thinking,
                         attachments = attachments,
                         raw = shown,
-                        details = parseDetails(meta),
+                        details = details,
                     )
+                    if (role == "assistant" && details.variants.size > 1 && details.shownVariant != details.variants.lastIndex) {
+                        showVariant(row, details.shownVariant)
+                    } else row
                 }
             return HistoryPage(
                 messages = messages,
@@ -456,6 +542,22 @@ class ChatApi(private val http: Http) {
 
         private fun seg(s: String) = java.net.URLEncoder.encode(s, "UTF-8").replace("+", "%20")
     }
+}
+
+/**
+ * [m] showing its kept version [index]: text and reasoning come from the
+ * version, and the reply's own flagged reasoning is dropped, as it belongs to
+ * the newest text.
+ */
+internal fun showVariant(m: HistoryMessage, index: Int): HistoryMessage {
+    val v = m.details.variants.getOrNull(index) ?: return m
+    val split = splitThinking(v.raw)
+    return m.copy(
+        content = split.answer,
+        raw = v.raw,
+        thinking = split.thinking.ifBlank { null },
+        details = m.details.copy(variantIndex = index),
+    )
 }
 
 /** A string field, with JSON null and absence both as null. */

@@ -218,4 +218,159 @@ class ChatApiTest {
         assertEquals("true", fields["skip_validation"])
         assertEquals("ep_local01", fields["endpoint_id"])
     }
+
+    // -- variants, continue, jobs, speech ----------------------------------
+
+    @Test
+    fun updateLastMetaPostsTheMetadataObject() = runBlocking {
+        server.enqueue(MockResponse().setBody("""{"status":"ok"}"""))
+        val kept = listOf(Variant("old", "original"), Variant("new", "regen"))
+        api.updateLastMeta("s1", variantsMeta(kept, 1))
+        val r = server.takeRequest()
+        assertEquals("POST", r.method)
+        assertEquals("/api/session/s1/update-last-meta", r.path)
+        val meta = JSONObject(r.body.readUtf8()).getJSONObject("metadata")
+        assertEquals(1, meta.getInt("variantIndex"))
+        assertEquals(listOf("old", "new"), (0 until 2).map { meta.getJSONArray("variants").getJSONObject(it).getString("raw") })
+        assertEquals("original", meta.getJSONArray("variants").getJSONObject(0).getString("label"))
+    }
+
+    @Test
+    fun updateLastMetaErrorsSurface() {
+        server.enqueue(MockResponse().setResponseCode(404).setBody("""{"detail":"Session not found"}"""))
+        val e = runCatching { runBlocking { api.updateLastMeta("s1", JSONObject().put("variantIndex", 0)) } }.exceptionOrNull() as ApiException
+        assertEquals(404, e.status)
+        assertEquals("Session not found", e.message)
+    }
+
+    @Test
+    fun mergeLastAssistantSendsTheSeparatorAndReadsMerged() = runBlocking {
+        server.enqueue(MockResponse().setBody("""{"status":"ok","merged":true}"""))
+        server.enqueue(MockResponse().setBody("""{"status":"ok","merged":false,"reason":"no_continue_marker"}"""))
+        assertTrue(api.mergeLastAssistant("s1", "\n\n*(continued)*\n\n"))
+        val r = server.takeRequest()
+        assertEquals("/api/session/s1/merge-last-assistant", r.path)
+        assertEquals("\n\n*(continued)*\n\n", JSONObject(r.body.readUtf8()).getString("separator"))
+        assertFalse(api.mergeLastAssistant("s1", "\n\n"))
+    }
+
+    @Test
+    fun mergeLastAssistantErrorsSurface() {
+        server.enqueue(MockResponse().setResponseCode(500).setBody("""{"detail":"boom"}"""))
+        val e = runCatching { runBlocking { api.mergeLastAssistant("s1", "\n\n") } }.exceptionOrNull() as ApiException
+        assertEquals("boom", e.message)
+    }
+
+    @Test
+    fun researchJobsParseWhatTheWebReads() = runBlocking {
+        server.enqueue(json("chat_jobs.json"))
+        val jobs = api.researchJobs("s1")
+        assertEquals("/api/research/chat-jobs/s1", server.takeRequest().path)
+        // The entry without an id is dropped.
+        assertEquals(listOf("job_run1", "job_done1", "job_bad1"), jobs.map { it.id })
+        val (running, delivered, noSources) = jobs
+        assertTrue(running.active)
+        assertEquals("Searching", researchCardState(running).label)
+        assertEquals("Round 2/3 \u00B7 11 sources \u00B7 You can keep chatting.", researchCardState(running).detail)
+        assertFalse(delivered.active)
+        assertEquals("Research finished", researchCardState(delivered).label)
+        assertEquals("7 sources \u00B7 See the update in chat.", researchCardState(delivered).detail)
+        assertEquals("No sources found", researchCardState(noSources).label)
+        assertEquals(JobTone.Error, researchCardState(noSources).tone)
+    }
+
+    @Test
+    fun researchJobsErrorsAndEmptyBodies() = runBlocking {
+        server.enqueue(MockResponse().setBody("""{}"""))
+        assertEquals(emptyList<ResearchJob>(), api.researchJobs("s1"))
+        server.enqueue(MockResponse().setResponseCode(401).setBody("""{"detail":"Not authenticated"}"""))
+        val e = runCatching { api.researchJobs("s1") }.exceptionOrNull() as ApiException
+        assertEquals(401, e.status)
+    }
+
+    @Test
+    fun ttsIsEnabledOnlyForAServerSideVoice() = runBlocking {
+        server.enqueue(json("tts_stats.json"))
+        assertTrue(api.ttsEnabled())
+        assertEquals("/api/tts/stats", server.takeRequest().path)
+        // Off in settings: the server folds that into available/ready.
+        server.enqueue(MockResponse().setBody("""{"available":false,"ready":false,"provider":"local"}"""))
+        assertFalse(api.ttsEnabled())
+        // The web's own speech engine cannot make audio for the app.
+        server.enqueue(MockResponse().setBody("""{"available":true,"ready":true,"provider":"browser"}"""))
+        assertFalse(api.ttsEnabled())
+        server.enqueue(MockResponse().setBody("""{"available":true,"ready":true,"provider":"disabled"}"""))
+        assertFalse(api.ttsEnabled())
+    }
+
+    @Test
+    fun synthesizePostsTheTextAndReturnsTheAudio() = runBlocking {
+        server.enqueue(MockResponse().setHeader("Content-Type", "audio/mpeg").setBody(okio.Buffer().write(byteArrayOf(0x49, 0x44, 0x33, 1, 2))))
+        val speech = api.synthesize("Hello there")
+        val r = server.takeRequest()
+        assertEquals("POST", r.method)
+        assertEquals("/api/tts/synthesize", r.path)
+        val body = JSONObject(r.body.readUtf8())
+        assertEquals("Hello there", body.getString("text"))
+        assertEquals("audio", body.getString("format"))
+        assertEquals("audio/mpeg", speech.mime)
+        assertEquals(5, speech.bytes.size)
+    }
+
+    @Test
+    fun synthesizeErrorsCarryTheServersMessage() {
+        server.enqueue(MockResponse().setResponseCode(503).setBody("""{"detail":{"message":"TTS service not available"}}"""))
+        val e = runCatching { runBlocking { api.synthesize("x") } }.exceptionOrNull() as ApiException
+        assertEquals(503, e.status)
+        assertEquals("TTS service not available", e.message)
+        server.enqueue(MockResponse().setHeader("Content-Type", "audio/wav"))
+        val empty = runCatching { runBlocking { api.synthesize("x") } }.exceptionOrNull() as ApiException
+        assertEquals("The server returned no audio", empty.message)
+    }
+
+    @Test
+    fun historyReadsMarkersAndShowsTheChosenVersion() {
+        val page = ChatApi.parseHistory(
+            JSONObject(
+                """{"history":[
+                  {"role":"assistant","content":"cut off","metadata":{"_db_id":"a1","stopped":true}},
+                  {"role":"assistant","content":"nothing","metadata":{"_db_id":"a2","stopped":true,"cancelled":true}},
+                  {"role":"assistant","content":"fixed","metadata":{"_db_id":"a3","edited":true}},
+                  {"role":"assistant","content":"third","metadata":{"_db_id":"a4","variantIndex":0,
+                    "variants":[{"raw":"first","label":"original","html":"<p>first</p>"},{"raw":"second","label":"regen"},{"raw":"third","label":"regen"}]}},
+                  {"role":"assistant","content":"third","metadata":{"_db_id":"a5","variants":[{"raw":"x","label":"original"},{"raw":"third","label":"shorter"}]}},
+                  {"role":"assistant","content":"edited text","metadata":{"_db_id":"a6","edited":true,"variantIndex":0,
+                    "variants":[{"raw":"x","label":"original"},{"raw":"y","label":"regen"}]}}
+                ]}""",
+            ),
+        )
+        val m = page.messages
+        val stopped = m[0]; val cancelled = m[1]; val edited = m[2]
+        val shownFirst = m[3]; val newest = m[4]; val editedVariants = m[5]
+        assertTrue(stopped.details.stopped)
+        assertFalse(stopped.details.cancelled)
+        assertTrue(cancelled.details.cancelled)
+        assertTrue(edited.details.edited)
+        // The chosen older version replaces the stored text; the list is kept whole.
+        assertEquals("first", shownFirst.content)
+        assertEquals(0, shownFirst.details.shownVariant)
+        assertEquals(3, shownFirst.details.variants.size)
+        assertEquals("<p>first</p>", shownFirst.details.variants[0].html)
+        // No index means the newest, which is the stored text.
+        assertEquals("third", newest.content)
+        assertEquals(1, newest.details.shownVariant)
+        // An edit is saved over the stored text only, so it wins over the kept versions.
+        assertEquals("edited text", editedVariants.content)
+        assertTrue(editedVariants.details.variants.isEmpty())
+    }
+
+    @Test
+    fun keptVersionsStartFromTheOriginalAndRoundTrip() {
+        assertEquals(listOf(Variant("a", "original")), keptVariants(emptyList(), "a"))
+        val have = listOf(Variant("a", "original"), Variant("b", "regen", "<p>b</p>"))
+        assertEquals(have, keptVariants(have, "ignored"))
+        val meta = variantsMeta(have, 1)
+        assertEquals("<p>b</p>", meta.getJSONArray("variants").getJSONObject(1).getString("html"))
+        assertFalse(meta.getJSONArray("variants").getJSONObject(0).has("html"))
+    }
 }

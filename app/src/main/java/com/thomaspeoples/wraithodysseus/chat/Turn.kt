@@ -368,7 +368,21 @@ data class MessageDetails(
     val tools: List<ToolCard> = emptyList(),
     val images: List<GeneratedImage> = emptyList(),
     val metrics: MessageMetrics? = null,
+    /** metadata.stopped: the reply was cut off by the person (chatRenderer.js:3680). */
+    val stopped: Boolean = false,
+    /** metadata.cancelled: stopped before any text, so there is nothing to continue. */
+    val cancelled: Boolean = false,
+    /** metadata.edited, set by the server's edit-message. */
+    val edited: Boolean = false,
+    /** metadata.variants: earlier versions of this reply, oldest first. Only
+     * ever more than one when regenerate or a rewrite kept the old text. */
+    val variants: List<Variant> = emptyList(),
+    /** metadata.variantIndex: the one on show; null means the newest. */
+    val variantIndex: Int? = null,
 ) {
+    /** The version on show, kept inside the list. */
+    val shownVariant: Int get() = (variantIndex ?: variants.lastIndex).coerceIn(0, maxOf(variants.lastIndex, 0))
+
     /** The web shows research sources in place of web ones when both exist. */
     val sources: List<Source> get() = researchSources.ifEmpty { webSources }
     val sourcesLabel: String get() = if (researchSources.isNotEmpty()) "Research sources" else "Web sources"
@@ -479,7 +493,90 @@ fun parseDetails(meta: JSONObject?): MessageDetails {
         tools = saved.filter { it.str("tool") != "ask_user" }.map { ToolCard.finished(it) },
         images = saved.mapNotNull(::savedImage).distinctBy { it.url },
         metrics = metrics,
+        stopped = meta.optBoolean("stopped", false),
+        cancelled = meta.optBoolean("cancelled", false),
+        edited = meta.optBoolean("edited", false),
+        variants = parseVariants(meta.optJSONArray("variants")),
+        variantIndex = if (meta.has("variantIndex") && !meta.isNull("variantIndex")) meta.optInt("variantIndex", -1).takeIf { it >= 0 } else null,
     )
+}
+
+/**
+ * One kept version of a reply, as the web stores it (chat.js:7216): [label]
+ * is "original", "regen", "shorter" or "simpler". The web also stores the
+ * rendered [html]; it re-renders from [raw] when loading, so the app does
+ * not need it, but writes back whatever it read so a web client sees no change.
+ */
+data class Variant(val raw: String, val label: String?, val html: String? = null) {
+    fun toJson(): JSONObject = JSONObject().put("raw", raw).apply {
+        if (html != null) put("html", html)
+        put("label", label ?: JSONObject.NULL)
+    }
+}
+
+private fun parseVariants(arr: JSONArray?): List<Variant> =
+    (0 until (arr?.length() ?: 0)).mapNotNull { i ->
+        val o = arr?.optJSONObject(i) ?: return@mapNotNull null
+        Variant(o.str("raw") ?: return@mapNotNull null, o.str("label"), o.str("html"))
+    }
+
+/** The metadata body of update-last-meta that keeps [variants] and shows [index] (chat.js:7218). */
+fun variantsMeta(variants: List<Variant>, index: Int): JSONObject =
+    JSONObject().put("variants", JSONArray(variants.map { it.toJson() })).put("variantIndex", index)
+
+/** What a regenerate or rewrite keeps: the versions so far, or the reply itself as "original". */
+fun keptVariants(current: List<Variant>, raw: String): List<Variant> =
+    current.ifEmpty { listOf(Variant(raw, "original")) }
+
+/** The glyph the web prints beside a version's number (chatRenderer.js:3743). */
+fun variantGlyph(label: String?): String = when (label) {
+    "regen" -> "\u21BB"
+    "shorter" -> "\u2702"
+    "simpler" -> "?"
+    "original" -> "\u25CB"
+    else -> ""
+}
+
+/** An item of GET /api/research/chat-jobs/{sid} (src/background_tool_jobs.py:67). */
+data class ResearchJob(
+    val id: String,
+    val tool: String,
+    val query: String,
+    /** "running", "ready" (report written, chat update coming), "delivered", "discarded"... */
+    val status: String,
+    val rounds: Int?,
+    val sourceCount: Int?,
+    /** "complete", "error" or "no_sources" once ready or delivered. */
+    val outcome: String?,
+    val phase: String?,
+    val round: Int?,
+    val totalSources: Int?,
+) {
+    /** Still to land in the chat, so worth polling for. */
+    val active: Boolean get() = status == "running" || status == "ready"
+}
+
+enum class JobTone { Running, Done, Error }
+
+data class JobCard(val tone: JobTone, val label: String, val detail: String)
+
+/** backgroundToolJobs.js:21 researchCardState, word for word. */
+fun researchCardState(job: ResearchJob): JobCard {
+    if (job.outcome == "error") return JobCard(JobTone.Error, "Research failed", "Open research for details.")
+    if (job.outcome == "no_sources") return JobCard(JobTone.Error, "No sources found", "This run did not return source-backed findings.")
+    if (job.status == "delivered") return JobCard(JobTone.Done, "Research finished", "${job.sourceCount ?: "\u2014"} sources \u00B7 See the update in chat.")
+    if (job.status == "ready") return JobCard(JobTone.Running, "Preparing chat update", "The report is ready. You can keep chatting.")
+    val label = when (job.phase) {
+        "probing" -> "Checking model"
+        "planning" -> "Planning"
+        "searching" -> "Searching"
+        "reading" -> "Reading sources"
+        "analyzing" -> "Analyzing findings"
+        "writing" -> "Writing report"
+        else -> "Starting research"
+    }
+    val round = job.round?.takeIf { it > 0 }?.let { "Round $it${job.rounds?.let { r -> "/$r" } ?: ""} \u00B7 " }.orEmpty()
+    return JobCard(JobTone.Running, label, "$round${job.totalSources ?: 0} sources \u00B7 You can keep chatting.")
 }
 
 /** static/js/generatedImageResult.js: a failed call has no image; an image tool may carry it in its JSON output. */

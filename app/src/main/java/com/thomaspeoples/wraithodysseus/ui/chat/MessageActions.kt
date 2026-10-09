@@ -54,6 +54,7 @@ internal enum class MessageAction(val label: String, val icon: ImageVector) {
     Copy("Copy", Lucide.Copy),
     SelectText("Select text", Lucide.TextSelect),
     Share("Share", Lucide.Share2),
+    ReadAloud("Read aloud", Lucide.Volume2),
     Fork("Fork conversation", Lucide.GitFork),
     Edit("Edit", Lucide.Pencil),
     Regenerate("Regenerate from here", Lucide.RefreshCw),
@@ -65,18 +66,21 @@ internal enum class MessageAction(val label: String, val icon: ImageVector) {
 
 /** Reading and copying always work; the rest change the chat on the server,
  * so they need the message's database id and no run going. */
-private val READ_ONLY = setOf(MessageAction.Copy, MessageAction.SelectText, MessageAction.Share)
+private val READ_ONLY = setOf(MessageAction.Copy, MessageAction.SelectText, MessageAction.Share, MessageAction.ReadAloud)
 
 private fun available(all: List<MessageAction>, canChange: Boolean) =
     all.filter { canChange || it in READ_ONLY }
 
-/** The long-press menu: all of them. Rewrite and explain only on the last reply. */
-internal fun fullMenu(user: Boolean, lastReply: Boolean, canChange: Boolean): List<MessageAction> = available(
+/** The long-press menu: all of them. Rewrite and explain only on the last reply;
+ * Read aloud only on a reply, and only when the server can speak ([readAloud]). */
+internal fun fullMenu(user: Boolean, lastReply: Boolean, canChange: Boolean, readAloud: Boolean = false): List<MessageAction> = available(
     if (user) {
         listOf(MessageAction.Copy, MessageAction.SelectText, MessageAction.Edit, MessageAction.Resend, MessageAction.Delete)
     } else {
         buildList {
-            addAll(listOf(MessageAction.Copy, MessageAction.SelectText, MessageAction.Share, MessageAction.Fork, MessageAction.Edit, MessageAction.Regenerate))
+            addAll(listOf(MessageAction.Copy, MessageAction.SelectText, MessageAction.Share))
+            if (readAloud) add(MessageAction.ReadAloud)
+            addAll(listOf(MessageAction.Fork, MessageAction.Edit, MessageAction.Regenerate))
             if (lastReply) addAll(listOf(MessageAction.Shorter, MessageAction.Simpler))
             add(MessageAction.Delete)
         }
@@ -89,11 +93,12 @@ internal fun footerButtons(user: Boolean): List<MessageAction> =
     if (user) listOf(MessageAction.Edit, MessageAction.Delete) else listOf(MessageAction.Copy, MessageAction.Delete)
 
 /** What the footer's "···" opens: the rest of the web's list. */
-internal fun overflowMenu(user: Boolean, lastReply: Boolean, canChange: Boolean): List<MessageAction> = available(
+internal fun overflowMenu(user: Boolean, lastReply: Boolean, canChange: Boolean, readAloud: Boolean = false): List<MessageAction> = available(
     if (user) {
         listOf(MessageAction.Copy, MessageAction.Resend)
     } else {
         buildList {
+            if (readAloud) add(MessageAction.ReadAloud)
             addAll(listOf(MessageAction.Fork, MessageAction.Edit, MessageAction.Regenerate))
             if (lastReply) addAll(listOf(MessageAction.Shorter, MessageAction.Simpler))
         }
@@ -116,6 +121,15 @@ internal class MessageMenu(
     val onRewrite: (String) -> Unit,
     val onFork: () -> Unit,
     val onDelete: () -> Unit,
+    /** The server can speak, so Read aloud is offered on a reply. */
+    val readAloud: Boolean = false,
+    /** This reply is the one being read, so the action stops it. */
+    val speaking: Boolean = false,
+    val onReadAloud: () -> Unit = {},
+    /** Continue a stopped reply; null where it does not apply. */
+    val onContinue: (() -> Unit)? = null,
+    /** Show kept version n of this reply. */
+    val onVariant: (Int) -> Unit = {},
 )
 
 internal const val SHORTER = "Rewrite your last response to be shorter and more concise. Keep the key information but cut the fluff."
@@ -198,6 +212,7 @@ internal class MessageRunner(
             MessageAction.Fork -> menu?.onFork?.invoke()
             MessageAction.Regenerate -> menu?.onRegenerate?.invoke()
             MessageAction.Resend -> menu?.onResend?.invoke()
+            MessageAction.ReadAloud -> menu?.onReadAloud?.invoke()
             MessageAction.Shorter -> menu?.onRewrite?.invoke(SHORTER)
             MessageAction.Simpler -> menu?.onRewrite?.invoke(SIMPLER)
         }
@@ -209,16 +224,18 @@ internal class MessageRunner(
 internal fun MessageLayers(layer: Layer, onLayer: (Layer) -> Unit, user: Boolean, text: String, menu: MessageMenu?, runner: MessageRunner) {
     val close = { onLayer(Layer.None) }
 
+    val reading = menu?.speaking == true
     fun sheet(items: List<MessageAction>) = items.map { a ->
-        SheetAction(a.label, a.icon, destructive = a == MessageAction.Delete) { runner.run(a) }
+        val stop = a == MessageAction.ReadAloud && reading
+        SheetAction(if (stop) "Stop reading" else a.label, if (stop) Lucide.Square else a.icon, destructive = a == MessageAction.Delete) { runner.run(a) }
     }
 
     val canChange = menu?.canChange == true
     val lastReply = menu?.lastReply == true
     when (layer) {
         Layer.None -> Unit
-        Layer.Full -> ActionSheet(sheet(fullMenu(user, lastReply, canChange)), onDismiss = close, title = "Message actions")
-        Layer.More -> ActionSheet(sheet(overflowMenu(user, lastReply, canChange)), onDismiss = close)
+        Layer.Full -> ActionSheet(sheet(fullMenu(user, lastReply, canChange, menu?.readAloud == true && !user)), onDismiss = close, title = "Message actions")
+        Layer.More -> ActionSheet(sheet(overflowMenu(user, lastReply, canChange, menu?.readAloud == true && !user)), onDismiss = close)
         Layer.Select -> SelectTextDialog(text, onDismiss = close)
         Layer.Edit -> menu?.let { EditDialog(it.editText(), onDismiss = close, onSave = { t -> close(); it.onEdit(t) }) }
         Layer.Delete -> menu?.let {

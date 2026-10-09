@@ -30,6 +30,8 @@ import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.thomaspeoples.wraithodysseus.chat.ChatApi
 import com.thomaspeoples.wraithodysseus.chat.HistoryMessage
+import com.thomaspeoples.wraithodysseus.chat.MediaPlayerOutput
+import com.thomaspeoples.wraithodysseus.ui.chat.parts.ResearchJobCards
 import com.thomaspeoples.wraithodysseus.ui.common.LocalSnackbar
 import com.thomaspeoples.wraithodysseus.ui.theme.Muted
 import kotlinx.coroutines.Dispatchers
@@ -47,16 +49,19 @@ fun ChatScreen(
     /** Opens another chat by id: where Fork lands once the copy exists. */
     onOpenChat: (String) -> Unit = {},
 ) {
-    val vm = viewModel(key = sessionId) { ChatViewModel(api, sessionId, createSavedStateHandle()) }
     val context = LocalContext.current
+    val cacheDir = context.applicationContext.cacheDir
+    val vm = viewModel(key = sessionId) {
+        ChatViewModel(api, sessionId, createSavedStateHandle(), speech = MediaPlayerOutput(cacheDir))
+    }
     val snackbar = LocalSnackbar.current
     LaunchedEffect(vm) { vm.notices.collect { snackbar.showSnackbar(it) } }
 
     // Covers screen-off and app switches: a run that dropped (or was started
     // elsewhere) is picked up again, replayed from its start.
     LifecycleResumeEffect(vm) {
-        vm.attach()
-        onPauseOrDispose { }
+        vm.onResume()
+        onPauseOrDispose { vm.onPause() }
     }
 
     Column(
@@ -85,6 +90,7 @@ fun ChatScreen(
             vm.live?.toolLine?.let { item { Text(it, color = Muted, style = MaterialTheme.typography.labelSmall, maxLines = 2, overflow = TextOverflow.Ellipsis) } }
             vm.live?.notices?.asReversed()?.forEach { n -> item { NoticeLine(n) } }
             vm.live?.let { turn -> item(key = "live") { LiveBubble(turn, vm.sessionModel) } }
+            if (vm.jobs.isNotEmpty()) item(key = "jobs") { ResearchJobCards(vm.jobs) }
             itemsIndexed(bottomFirst, key = { i, m -> m.dbId ?: "local-${bottomFirst.size - i}" }) { _, m ->
                 Box(Modifier.animateItem(fadeInSpec = tween(300), placementSpec = tween(300))) {
                     val streaming = vm.rewriting?.takeIf { m.dbId != null && m.dbId == lastReplyId }
@@ -141,6 +147,11 @@ private fun messageMenu(vm: ChatViewModel, m: HistoryMessage, lastReplyId: Strin
     onRewrite = { vm.rewrite(m, it) },
     onFork = { vm.fork(m, onOpenChat) },
     onDelete = { vm.delete(m) },
+    readAloud = vm.ttsEnabled && m.role == "assistant",
+    speaking = vm.speaking == vm.speechKey(m),
+    onReadAloud = { vm.readAloud(m) },
+    onContinue = { vm.continueReply(m) },
+    onVariant = { vm.switchVariant(m, it) },
 )
 
 /** Name, type and bytes of a picked file. Read whole: the server caps
