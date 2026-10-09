@@ -4,6 +4,10 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.OutlinedButton
+import com.thomaspeoples.wraithodysseus.ui.icons.Lucide
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -56,6 +60,11 @@ fun ReadScreen(api: EmailApi, accountId: String?, folder: String, uid: String, o
     var notice by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     var replying by rememberSaveable { mutableStateOf(false) }
+    // The context typed for the AI draft; the composer starts generating
+    // with it when aiStart is set, and Reply leaves it unset.
+    var aiHint by rememberSaveable { mutableStateOf("") }
+    var aiStart by rememberSaveable { mutableStateOf(false) }
+    var askHint by rememberSaveable { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(accountId, folder, uid) {
@@ -70,8 +79,14 @@ fun ReadScreen(api: EmailApi, accountId: String?, folder: String, uid: String, o
 
     val loaded = message
     if (replying && loaded != null) {
-        BackHandler { replying = false }
-        ComposeScreen(api = api, onDone = { replying = false }, reply = loaded, replyAccountId = accountId)
+        BackHandler { replying = false; aiStart = false }
+        ComposeScreen(
+            api = api,
+            onDone = { replying = false; aiStart = false },
+            reply = loaded,
+            replyAccountId = accountId,
+            generateWithHint = if (aiStart) aiHint else null,
+        )
         return
     }
 
@@ -86,8 +101,29 @@ fun ReadScreen(api: EmailApi, accountId: String?, folder: String, uid: String, o
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
-                actions = {
-                    if (loaded != null) {
+            )
+        },
+    ) { padding ->
+        Box(Modifier.padding(padding).fillMaxSize()) {
+            when {
+                error != null -> Column { Banner(error.orEmpty(), MaterialTheme.colorScheme.error) }
+                loaded == null -> CircularProgressIndicator(Modifier.align(Alignment.Center))
+                else -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                    if (loaded.markSeenFailed) Banner("Could not mark this message read on the server.", OdyColors.Warn)
+                    notice?.let { Banner(it, MaterialTheme.colorScheme.secondary) }
+                    Header(loaded)
+                    Row(
+                        Modifier.padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        OutlinedButton(onClick = { askHint = true }) {
+                            Icon(Lucide.Sparkle, null, Modifier.size(16.dp))
+                            Text("AI reply", Modifier.padding(start = 6.dp))
+                        }
+                        OutlinedButton(onClick = { aiStart = false; replying = true }) {
+                            Icon(Lucide.Reply, null, Modifier.size(16.dp))
+                            Text("Reply", Modifier.padding(start = 6.dp))
+                        }
                         TextButton(
                             enabled = !busy,
                             onClick = {
@@ -105,20 +141,14 @@ fun ReadScreen(api: EmailApi, accountId: String?, folder: String, uid: String, o
                                 }
                             },
                         ) { Text("Mark unread") }
-                        TextButton(onClick = { replying = true }) { Text("Reply") }
                     }
-                },
-            )
-        },
-    ) { padding ->
-        Box(Modifier.padding(padding).fillMaxSize()) {
-            when {
-                error != null -> Column { Banner(error.orEmpty(), MaterialTheme.colorScheme.error) }
-                loaded == null -> CircularProgressIndicator(Modifier.align(Alignment.Center))
-                else -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-                    if (loaded.markSeenFailed) Banner("Could not mark this message read on the server.", OdyColors.Warn)
-                    notice?.let { Banner(it, MaterialTheme.colorScheme.secondary) }
-                    Header(loaded)
+                    if (askHint) {
+                        AiReplyDialog(
+                            initial = aiHint,
+                            onDismiss = { askHint = false },
+                            onConfirm = { aiHint = it; aiStart = true; askHint = false; replying = true },
+                        )
+                    }
                     HorizontalDivider(color = MaterialTheme.colorScheme.outline)
                     SelectionContainer {
                         Text(

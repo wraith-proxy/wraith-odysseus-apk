@@ -2,6 +2,7 @@ package com.thomaspeoples.wraithodysseus.email
 
 import com.thomaspeoples.wraithodysseus.net.ApiException
 import com.thomaspeoples.wraithodysseus.net.Http
+import com.thomaspeoples.wraithodysseus.net.sseFrames
 import java.io.IOException
 import java.net.ConnectException
 import java.net.UnknownHostException
@@ -178,6 +179,35 @@ class EmailApi(private val http: Http, private val sendTimeoutSeconds: Long = Ht
         }
     }
 
+    /**
+     * Drafts a reply with the server's AI, streamed. [onPreview] gets the full
+     * visible text each time it changes (""  means start over), on the
+     * caller's dispatcher. Returns once the result frame arrives; its text,
+     * not the last preview, is the draft. Cancelling the caller closes the
+     * response, which is what Stop does.
+     *
+     * Not retried (a second POST would start a second generation) and read
+     * with 180s, not the stream default of 120s: the server sends no
+     * heartbeat here and a slow local model can stay silent that long. The
+     * server cuts non-streamed calls at 45s (app.py ~182-208), hence streaming.
+     * HTTP and network failures throw ApiException / IOException; a stream
+     * that ends with no result frame is a Failed outcome.
+     */
+    suspend fun aiReply(request: AiReplyRequest, onPreview: (String) -> Unit): AiReplyOutcome {
+        val body = aiReplyJson(request).toString().toRequestBody(JSON)
+        val post = Request.Builder().url(http.url("/api/email/ai-reply")).post(body).build()
+        var progress = AiReplyProgress()
+        http.open(post, AI_REPLY_TIMEOUT_S, retry = false).use { response ->
+            response.sseFrames().collect { raw ->
+                val frame = parseAiReplyFrame(raw.data) ?: return@collect
+                val next = reduceAiReply(progress, frame)
+                if (next.text != progress.text) onPreview(next.text)
+                progress = next
+            }
+        }
+        return progress.outcome ?: AiReplyOutcome.Failed("The AI reply ended before it finished")
+    }
+
     private fun get(url: HttpUrl) = Request.Builder().url(url).build()
 
     /** Segments are encoded one by one, so a uid can never add a path. */
@@ -189,6 +219,7 @@ class EmailApi(private val http: Http, private val sendTimeoutSeconds: Long = Ht
 
     companion object {
         const val INBOX = "INBOX"
+        const val AI_REPLY_TIMEOUT_S = 180L
         /** Same page size as the web UI, and small enough to stay well
          * inside the server's 45s request timeout. */
         const val PAGE_SIZE = 50
