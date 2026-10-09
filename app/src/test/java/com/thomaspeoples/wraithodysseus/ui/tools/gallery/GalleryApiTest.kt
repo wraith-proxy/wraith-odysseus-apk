@@ -158,6 +158,15 @@ class GalleryApiTest {
     }
 
     @Test
+    fun imageBytesOverTheCapComeBackEmpty() = runBlocking {
+        val big = okio.Buffer().write(ByteArray((GalleryApi.IMAGE_MAX_BYTES + 1).toInt()))
+        server.enqueue(MockResponse().setBody(big))
+        assertEquals(0, api.imageBytes("/api/generated-image/0123456789ab.jpg").size)
+        server.enqueue(MockResponse().setBody(okio.Buffer().write(ByteArray(10))).setChunkedBody("0123456789", 4))
+        assertEquals(10, api.imageBytes("/api/generated-image/0123456789ab.jpg").size)
+    }
+
+    @Test
     fun imageBytesFromAnotherHostCarryNoCookie() = runBlocking {
         val other = MockWebServer().apply { start() }
         try {

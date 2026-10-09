@@ -115,11 +115,21 @@ class GalleryApi(private val http: Http) {
         return parseUpload(http.call(request, readTimeoutSeconds = UPLOAD_TIMEOUT_S, retry = false))
     }
 
-    /** The bytes behind [GalleryImage.url], fetched with the session cookie (and only for the server's own origin). */
+    /**
+     * The bytes behind [GalleryImage.url], fetched with the session cookie (and only for the server's own origin).
+     * Originals have no thumbnail route, so anything over [IMAGE_MAX_BYTES] comes back empty (undecodable, shown
+     * as a placeholder) rather than filling memory four at a time.
+     */
     suspend fun imageBytes(url: String): ByteArray {
         val target = if (url.startsWith("/")) http.url(url) else url.toHttpUrl()
         val response = http.open(Request.Builder().url(target).get().build(), Http.SEND_TIMEOUT_S)
-        return withContext(Dispatchers.IO) { response.use { it.body?.bytes() ?: ByteArray(0) } }
+        return withContext(Dispatchers.IO) { response.use { r ->
+            val body = r.body ?: return@use ByteArray(0)
+            if (body.contentLength() > IMAGE_MAX_BYTES) return@use ByteArray(0)
+            // Chunked answers have no length: read one byte past the cap to notice.
+            val source = body.source()
+            if (source.request(IMAGE_MAX_BYTES + 1)) ByteArray(0) else source.readByteArray()
+        } }
     }
 
     private suspend fun get(path: String): String {
@@ -132,6 +142,7 @@ class GalleryApi(private val http: Http) {
         /** Under the server's cap of 100; a screenful and a bit more. */
         const val PAGE_SIZE = 60
         const val UPLOAD_TIMEOUT_S = 180L
+        const val IMAGE_MAX_BYTES = 25L * 1024 * 1024
         private val JSON = "application/json".toMediaType()
         val IMAGE_EXTS = setOf("png", "jpg", "jpeg", "webp", "gif")
 

@@ -72,7 +72,10 @@ fun MemoryScreen(env: ToolEnv) {
     val state = vm.state
     val snackbar = LocalSnackbar.current
     var searchOpen by rememberSaveable { mutableStateOf(false) }
-    var editing by remember { mutableStateOf<Editing?>(null) }
+    // Saveable so the editor survives rotation and reopens with its saved text; the memory is looked up by id.
+    var editingOpen by rememberSaveable { mutableStateOf(false) }
+    var editingId by rememberSaveable { mutableStateOf<String?>(null) }
+    val editing = if (editingOpen) Editing(state.memories.firstOrNull { it.id == editingId }) else null
     var sheet by remember { mutableStateOf<Memory?>(null) }
     var deleting by remember { mutableStateOf<Memory?>(null) }
     val canAdd = env.status?.allows("can_manage_memory") ?: true
@@ -133,7 +136,7 @@ fun MemoryScreen(env: ToolEnv) {
         }
         if (canAdd) {
             FloatingActionButton(
-                onClick = { editing = Editing(null) },
+                onClick = { editingId = null; editingOpen = true },
                 containerColor = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(16.dp),
             ) { Icon(Lucide.Plus, "New memory") }
@@ -144,13 +147,13 @@ fun MemoryScreen(env: ToolEnv) {
         MemoryEditor(
             memory = e.memory,
             saving = vm.saving,
-            onSave = { text, cat -> vm.save(e.memory, text, cat) { editing = null } },
-            onCancel = { editing = null },
+            onSave = { text, cat -> vm.save(e.memory, text, cat) { editingOpen = false } },
+            onCancel = { editingOpen = false },
         )
     }
     sheet?.let { m ->
         val actions = listOf(
-            SheetAction("Edit", Lucide.Pencil) { editing = Editing(m) },
+            SheetAction("Edit", Lucide.Pencil) { editingId = m.id; editingOpen = true },
             SheetAction(if (m.pinned) "Unpin" else "Pin", Lucide.Pin) { vm.togglePin(m) },
             SheetAction("Delete", Lucide.Trash2, destructive = true) { deleting = m },
         )

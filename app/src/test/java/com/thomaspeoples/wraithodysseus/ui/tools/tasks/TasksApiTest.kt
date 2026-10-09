@@ -184,6 +184,24 @@ class TasksApiTest {
     }
 
     @Test
+    fun onceDraftNeedsAFutureReadableDate() {
+        val base = TaskDraft("llm", null, "p", "once", null, null, null, null, null)
+        assertTrue(TasksApi.onceProblem(base, paris, now) != null)
+        assertTrue(TasksApi.onceProblem(base.copy(scheduledDate = "tomorrow-ish"), paris, now) != null)
+        assertTrue(TasksApi.onceProblem(base.copy(scheduledDate = "2001-01-01T07:30"), paris, now) != null)
+        assertNull(TasksApi.onceProblem(base.copy(scheduledDate = "2999-01-01T07:30"), paris, now))
+        assertNull(TasksApi.onceProblem(base.copy(schedule = "daily"), paris, now))
+    }
+
+    @Test
+    fun parseTaskTurnsJsonNullIntoEmptyNotTheWordNull() {
+        val t = TasksApi.parseTask(JSONObject("""{"id":"t1","name":null,"prompt":null,"status":null}"""))!!
+        assertEquals("", t.prompt)
+        assertEquals("", t.name)
+        assertEquals("", t.status)
+    }
+
+    @Test
     fun createBodyForCronOnceAndWeekly() {
         val base = TaskDraft("llm", null, "p", "cron", "07:00", null, null, "0 7 * * 1-5", null)
         val cron = TasksApi.createBody(base, paris, now)

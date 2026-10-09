@@ -159,8 +159,8 @@ class TasksApi(private val http: Http) {
             val id = o.optString("id").ifEmpty { return null }
             return Task(
                 id = id,
-                name = o.optString("name"),
-                prompt = o.optString("prompt"),
+                name = o.str("name").orEmpty(),
+                prompt = o.str("prompt").orEmpty(),
                 taskType = o.str("task_type") ?: "llm",
                 schedule = o.str("schedule"),
                 scheduledTime = o.str("scheduled_time"),
@@ -172,7 +172,7 @@ class TasksApi(private val http: Http) {
                 triggerCount = if (o.isNull("trigger_count")) null else o.optInt("trigger_count"),
                 nextRun = o.str("next_run"),
                 lastRun = o.str("last_run"),
-                status = o.optString("status"),
+                status = o.str("status").orEmpty(),
                 outputTarget = o.str("output_target") ?: "session",
                 runCount = o.optInt("run_count"),
                 isBuiltin = o.optBoolean("is_builtin"),
@@ -237,6 +237,18 @@ class TasksApi(private val http: Http) {
                 draft.scheduledDay?.let { o.put("scheduled_day", it) }
             }
             return o
+        }
+
+        /**
+         * Why a "once" draft cannot be created, or null. The server stores a
+         * once task with no usable future date as already completed (it never
+         * runs), so the confirm step refuses it rather than failing silently.
+         */
+        fun onceProblem(draft: TaskDraft, zone: ZoneId, now: Instant): String? {
+            if (draft.schedule != "once") return null
+            val iso = localDateTimeToUtcIso(draft.scheduledDate, zone)
+                ?: return "This task has no readable date, so it would never run."
+            return if (Instant.parse(iso) <= now) "That date has already passed, so the task would never run." else null
         }
 
         /** "07:30" local to "HH:MM" UTC, using today's offset as the web does. */

@@ -240,6 +240,7 @@ private fun NewTaskDialog(vm: TasksViewModel, onClose: () -> Unit, onCreated: ()
         )
         return
     }
+    val problem = remember(draft) { TasksApi.onceProblem(draft, java.time.ZoneId.systemDefault(), java.time.Instant.now()) }
     AlertDialog(
         onDismissRequest = { if (!vm.creating) vm.discardDraft() },
         title = { Text("Create this task?", style = MaterialTheme.typography.titleMedium) },
@@ -248,10 +249,11 @@ private fun NewTaskDialog(vm: TasksViewModel, onClose: () -> Unit, onCreated: ()
                 draft.name?.let { Text(it, style = MaterialTheme.typography.bodyLarge) }
                 Text(draftSummary(draft), color = Muted, style = MaterialTheme.typography.bodyMedium)
                 Text(draft.prompt, style = MaterialTheme.typography.bodyMedium)
+                problem?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                 if (vm.creating) LinearProgressIndicator(Modifier.fillMaxWidth())
             }
         },
-        confirmButton = { TextButton(onClick = { vm.confirmDraft(onCreated) }, enabled = !vm.creating) { Text("Create") } },
+        confirmButton = { TextButton(onClick = { vm.confirmDraft(onCreated) }, enabled = !vm.creating && problem == null) { Text("Create") } },
         dismissButton = { TextButton(onClick = vm::discardDraft, enabled = !vm.creating) { Text("Back") } },
         containerColor = MaterialTheme.colorScheme.surface,
     )

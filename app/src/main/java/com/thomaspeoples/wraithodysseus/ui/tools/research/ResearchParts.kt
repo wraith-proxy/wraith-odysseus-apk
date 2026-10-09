@@ -215,10 +215,12 @@ fun ReportView(html: String, onLink: (String) -> Unit, modifier: Modifier = Modi
                         if (request.isForMainFrame) null
                         else WebResourceResponse("text/plain", "utf-8", 200, "OK", emptyMap(), ByteArrayInputStream(ByteArray(0)))
 
-                    // A link tap, a meta refresh or a redirect: out to the browser. A same-page anchor scrolls here.
+                    // A link tap: out to the browser. A same-page anchor scrolls here.
                     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                         val url = request.url.toString()
                         if (url.startsWith("$BASE_URL#")) return false
+                        // Scraped report HTML must not open the browser by itself (meta refresh, frames): only a tap does.
+                        if (!request.hasGesture() || !request.isForMainFrame) return true
                         // A relative link resolves against the placeholder base and goes nowhere.
                         if (!url.startsWith(BASE_URL)) safeHref(url)?.let(link)
                         return true
