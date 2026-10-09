@@ -30,7 +30,7 @@ fun aiReplyRequest(original: EmailMessage, to: String, subject: String, accountI
     AiReplyRequest(
         to = to,
         subject = subject,
-        originalBody = original.body,
+        originalBody = quoteText(original),
         messageId = original.messageId,
         uid = original.uid,
         folder = original.folder,

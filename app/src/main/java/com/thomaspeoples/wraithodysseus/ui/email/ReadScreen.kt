@@ -98,8 +98,7 @@ private const val SWIPE_DP = 100
 /**
  * One message, as the web UI's reader. The body is the sandboxed HTML (or
  * plain text on request); the buttons are AI reply, Reply, Reply all, Forward
- * and More. Reply and AI reply open [ComposeScreen] in place, Reply all and
- * Forward [DraftComposeScreen], so the original they quote never has to
+ * and More. Reply, Reply all, Forward and AI reply open [ComposeScreen] in place, so the original they quote never has to
  * travel through a navigation argument. The server marks the message seen as
  * part of the read.
  *
@@ -110,7 +109,7 @@ private const val SWIPE_DP = 100
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ReadScreen(api: EmailApi, accountId: String?, folder: String, uid: String, onBack: () -> Unit) {
+fun ReadScreen(api: EmailApi, accountId: String?, folder: String, uid: String, onBack: () -> Unit, isAdmin: Boolean = false) {
     val context = LocalContext.current
     val snackbar = LocalSnackbar.current
     val scope = rememberCoroutineScope()
@@ -304,13 +303,22 @@ fun ReadScreen(api: EmailApi, accountId: String?, folder: String, uid: String, o
         val close = { composeMode = ""; aiStart = false }
         BackHandler { close() }
         when (composeMode) {
-            "replyAll" -> DraftComposeScreen(api, replyAllDraft(loaded, acct, mine), "Reply all", close)
-            "forward" -> DraftComposeScreen(
-                api,
-                forwardDraft(loaded, acct),
-                "Forward",
-                close,
-                ForwardSource(acct, curFolder, curUid, attachments.filterNot(::isLikelySignatureImage)),
+            "replyAll" -> ComposeScreen(
+                api = api,
+                onDone = close,
+                reply = loaded,
+                replyAccountId = acct,
+                prefill = replyAllDraft(loaded, acct, mine),
+                title = "Reply all",
+                isAdmin = isAdmin,
+            )
+            "forward" -> ComposeScreen(
+                api = api,
+                onDone = close,
+                prefill = forwardDraft(loaded, acct),
+                title = "Forward",
+                forward = ForwardSource(acct, curFolder, curUid, attachments.filterNot(::isLikelySignatureImage)),
+                isAdmin = isAdmin,
             )
             else -> ComposeScreen(
                 api = api,
@@ -318,6 +326,7 @@ fun ReadScreen(api: EmailApi, accountId: String?, folder: String, uid: String, o
                 reply = loaded,
                 replyAccountId = acct,
                 generateWithHint = if (aiStart) aiHint else null,
+                isAdmin = isAdmin,
             )
         }
         return

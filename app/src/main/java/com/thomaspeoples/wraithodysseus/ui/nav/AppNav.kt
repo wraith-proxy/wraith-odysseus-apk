@@ -407,10 +407,11 @@ fun AppNav() {
                             folder = args?.getString("folder").orEmpty(),
                             uid = args?.getString("uid").orEmpty(),
                             onBack = { nav.popBackStack() },
+                            isAdmin = status?.isAdmin == true,
                         )
                     }
                     composable(Routes.EMAIL_COMPOSE) {
-                        ComposeScreen(api = emailApi, onDone = { nav.popBackStack() })
+                        ComposeScreen(api = emailApi, onDone = { nav.popBackStack() }, isAdmin = status?.isAdmin == true)
                     }
                     composable(Routes.SETTINGS) {
                         SettingsScreen(

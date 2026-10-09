@@ -1,6 +1,10 @@
 package com.thomaspeoples.wraithodysseus.ui.email
 
+import android.net.Uri
+import android.provider.OpenableColumns
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -30,7 +34,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -48,8 +51,23 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.thomaspeoples.wraithodysseus.email.DraftRef
 import com.thomaspeoples.wraithodysseus.email.EmailAccount
+import com.thomaspeoples.wraithodysseus.email.StagedFile
+import com.thomaspeoples.wraithodysseus.email.isFuture
+import com.thomaspeoples.wraithodysseus.email.mentionsAttachment
+import com.thomaspeoples.wraithodysseus.email.recipientHeader
+import com.thomaspeoples.wraithodysseus.email.sendAtIso
+import com.thomaspeoples.wraithodysseus.email.splitAddresses
+import com.thomaspeoples.wraithodysseus.ui.common.ConfirmDialog
+import java.time.Instant
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.thomaspeoples.wraithodysseus.email.EmailApi
+import com.thomaspeoples.wraithodysseus.email.EmailAttachment
 import com.thomaspeoples.wraithodysseus.email.AI_HINT_MAX
 import com.thomaspeoples.wraithodysseus.email.AiReplyOutcome
 import com.thomaspeoples.wraithodysseus.email.EmailMessage
@@ -71,11 +89,23 @@ import com.thomaspeoples.wraithodysseus.ui.theme.SendButtonShape
 import java.io.IOException
 import kotlinx.coroutines.launch
 
+/** The message a Forward takes its attachments from. */
+data class ForwardSource(val accountId: String?, val folder: String, val uid: String, val attachments: List<EmailAttachment>)
+
 /**
- * A new message, or with [reply] set, a reply to it from [replyAccountId].
- * [onDone] is called on Sent and on back, which is held off while a send
- * is in flight; on any other outcome the draft stays on screen. Nothing is ever re-sent automatically: after an
+ * The composer: a new message, or with [prefill] a prefilled one (Reply All,
+ * Forward), or with [reply] set a reply to it from [replyAccountId]. To, Cc
+ * and Bcc are chips with contact suggestions ([isAdmin] picks the address
+ * book over the senders list); files are uploaded as they are picked, and a
+ * [forward] source has its attachments copied up front, so each can be
+ * dropped like any other. [onDone] is called on Sent, Scheduled and on back,
+ * which is held off while a send is in flight; on any other outcome the
+ * draft stays on screen. Nothing is ever re-sent automatically: after an
  * unconfirmed send a second tap could deliver the message twice.
+ *
+ * Send saves a recovery draft first and sends only if that worked (the web
+ * does the same); the server deletes the draft once delivered. A message
+ * that talks about an attachment but has none asks before it goes.
  *
  * In reply mode the AI reply button drafts the text above the quote. When
  * [generateWithHint] is non-null a draft starts as soon as the screen opens,
@@ -84,12 +114,37 @@ import kotlinx.coroutines.launch
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ComposeScreen(api: EmailApi, onDone: () -> Unit, reply: EmailMessage? = null, replyAccountId: String? = null, generateWithHint: String? = null) {
-    val draft = remember(reply) { reply?.let { replyDraft(it, replyAccountId) } }
-    var to by rememberSaveable { mutableStateOf(draft?.to.orEmpty()) }
-    var cc by rememberSaveable { mutableStateOf("") }
+fun ComposeScreen(
+    api: EmailApi,
+    onDone: () -> Unit,
+    reply: EmailMessage? = null,
+    replyAccountId: String? = null,
+    generateWithHint: String? = null,
+    prefill: SendRequest? = null,
+    title: String? = null,
+    forward: ForwardSource? = null,
+    isAdmin: Boolean = false,
+) {
+    val draft = remember(reply, prefill) { prefill ?: reply?.let { replyDraft(it, replyAccountId) } }
+    var toChips by rememberSaveable(stateSaver = StringList) { mutableStateOf(splitAddresses(draft?.to.orEmpty())) }
+    var toText by rememberSaveable { mutableStateOf("") }
+    var ccChips by rememberSaveable(stateSaver = StringList) { mutableStateOf(splitAddresses(draft?.cc.orEmpty())) }
+    var ccText by rememberSaveable { mutableStateOf("") }
+    var bccChips by rememberSaveable(stateSaver = StringList) { mutableStateOf(emptyList<String>()) }
+    var bccText by rememberSaveable { mutableStateOf("") }
+    var showBcc by rememberSaveable { mutableStateOf(false) }
     var subject by rememberSaveable { mutableStateOf(draft?.subject.orEmpty()) }
     var body by rememberSaveable { mutableStateOf(draft?.body.orEmpty()) }
+
+    // Files going out. The server holds them under their tokens, so the list
+    // survives a rotation; busy counts uploads still running.
+    var staged by rememberSaveable(stateSaver = StagedList) { mutableStateOf(emptyList<StagedFile>()) }
+    var busy by remember { mutableIntStateOf(0) }
+    // The recovery draft of a failed or unconfirmed send, replaced by the next try.
+    var draftUid by rememberSaveable { mutableStateOf("") }
+    var draftFolder by rememberSaveable { mutableStateOf("") }
+    var warnMissingFile by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var scheduling by remember { mutableStateOf(false) }
 
     // AI draft. preBody is what the body was before generating, which is put
     // back on failure or Stop. aiRunning is saveable for the same reason
@@ -130,7 +185,7 @@ fun ComposeScreen(api: EmailApi, onDone: () -> Unit, reply: EmailMessage? = null
         aiError = null
         aiJob = scope.launch {
             try {
-                val request = aiReplyRequest(original, to.trim(), subject.trim(), replyAccountId, context)
+                val request = aiReplyRequest(original, recipientHeader(toChips, toText), subject.trim(), replyAccountId, context)
                 when (val outcome = api.aiReply(request) { text -> body = aiReplyBody(text, quote) }) {
                     is AiReplyOutcome.Reply -> body = aiReplyBody(outcome.text, quote)
                     is AiReplyOutcome.Failed -> {
@@ -180,18 +235,38 @@ fun ComposeScreen(api: EmailApi, onDone: () -> Unit, reply: EmailMessage? = null
     }
 
     val choices = senders
-    val canSend = !sending && !aiRunning && to.isNotBlank() && subject.isNotBlank() &&
+    val hasTo = toChips.isNotEmpty() || toText.isNotBlank()
+    val canSend = !sending && !aiRunning && busy == 0 && hasTo && subject.isNotBlank() &&
         (draft != null || !choices.isNullOrEmpty())
 
-    fun send() {
-        // The reply headers come from the draft; only the text is edited.
-        val request = draft?.copy(to = to.trim(), cc = cc.trim(), subject = subject.trim(), body = body)
-            ?: SendRequest(to.trim(), cc.trim(), subject.trim(), body, choices?.getOrNull(senderIndex)?.id)
+    fun request(): SendRequest {
+        val base = draft ?: SendRequest("", "", "", "", choices?.getOrNull(senderIndex)?.id)
+        // The reply headers come from the draft; only what the person edits is replaced.
+        return base.copy(
+            to = recipientHeader(toChips, toText),
+            cc = recipientHeader(ccChips, ccText),
+            bcc = recipientHeader(bccChips, bccText),
+            subject = subject.trim(),
+            body = body,
+            attachments = staged.map { it.token },
+        )
+    }
+
+    /** Runs [go], after asking first when the text mentions a file that is not attached. */
+    fun guarded(go: () -> Unit) {
+        if (staged.isEmpty() && mentionsAttachment(body)) warnMissingFile = go else go()
+    }
+
+    fun doSend() {
+        val message = request()
         sending = true
         problem = null
         unconfirmed = false
         scope.launch {
-            when (val result = api.send(request)) {
+            val (result, saved) = api.sendWithRecovery(message, DraftRef(draftUid.ifEmpty { null }, draftFolder.ifEmpty { null }))
+            draftUid = saved?.uid.orEmpty()
+            draftFolder = saved?.folder.orEmpty()
+            when (result) {
                 SendResult.Sent -> {
                     Toast.makeText(context, "Sent", Toast.LENGTH_SHORT).show()
                     onDone()
@@ -203,11 +278,104 @@ fun ComposeScreen(api: EmailApi, onDone: () -> Unit, reply: EmailMessage? = null
         }
     }
 
+    fun send() = guarded(::doSend)
+
+    fun schedule(at: ZonedDateTime) {
+        if (!isFuture(at, Instant.now())) {
+            problem = "Pick a time in the future"
+            return
+        }
+        guarded {
+            val message = request()
+            sending = true
+            problem = null
+            scope.launch {
+                try {
+                    api.schedule(message, sendAtIso(at))
+                    val shown = at.format(DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM))
+                    Toast.makeText(context, "Scheduled for $shown", Toast.LENGTH_LONG).show()
+                    onDone()
+                } catch (e: ApiException) {
+                    problem = e.message
+                } catch (e: IOException) {
+                    problem = describe(e)
+                }
+                sending = false
+            }
+        }
+    }
+
+    fun upload(uri: Uri) {
+        scope.launch {
+            busy++
+            try {
+                val resolver = context.contentResolver
+                val name = withContext(Dispatchers.IO) {
+                    resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+                        if (c.moveToFirst()) c.getString(0) else null
+                    }
+                } ?: uri.lastPathSegment ?: "file"
+                val file = api.uploadAttachment(name, resolver.getType(uri) ?: "application/octet-stream") {
+                    resolver.openInputStream(uri) ?: throw IOException("Could not read $name")
+                }
+                staged = staged + file
+            } catch (e: ApiException) {
+                problem = e.message
+            } catch (e: IOException) {
+                problem = describe(e)
+            } finally {
+                busy--
+            }
+        }
+    }
+
+    fun unstage(file: StagedFile) {
+        staged = staged - file
+        // Best effort: the file only sits in the server's compose folder.
+        scope.launch { runCatching { api.removeAttachment(file.token) } }
+    }
+
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris -> uris.forEach(::upload) }
+
+    // Forward: copy the original's attachments into the compose uploads, as
+    // the web does when it opens. A restored screen carries on from how many
+    // it already has, in order.
+    LaunchedEffect(Unit) {
+        if (forward == null) return@LaunchedEffect
+        busy++
+        try {
+            for (a in forward.attachments.drop(staged.size)) {
+                val token = api.stageAttachment(forward.accountId, forward.folder, forward.uid, a.index)
+                staged = staged + StagedFile(token, a.filename, a.size)
+            }
+        } catch (e: ApiException) {
+            problem = "Could not attach the original files: ${e.message}"
+        } catch (e: IOException) {
+            problem = describe(e)
+        } finally {
+            busy--
+        }
+    }
+
+    warnMissingFile?.let { go ->
+        ConfirmDialog(
+            title = "No attachment",
+            text = "Your message mentions an attachment, but nothing is attached.",
+            confirm = "Send anyway",
+            destructive = false,
+            onConfirm = { warnMissingFile = null; go() },
+            onDismiss = { warnMissingFile = null },
+        )
+    }
+    if (scheduling) {
+        ScheduleSheet(context, { ZonedDateTime.now() }, { scheduling = false; schedule(it) }, { scheduling = false })
+    }
+
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = { Text(if (draft != null) "Reply" else "New message") },
+                title = { Text(title ?: if (draft != null) "Reply" else "New message") },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                 navigationIcon = {
                     IconButton(onClick = onDone, enabled = !sending) {
@@ -215,6 +383,12 @@ fun ComposeScreen(api: EmailApi, onDone: () -> Unit, reply: EmailMessage? = null
                     }
                 },
                 actions = {
+                    IconButton(onClick = { picker.launch("*/*") }, enabled = !sending) {
+                        Icon(Lucide.Paperclip, contentDescription = "Attach files")
+                    }
+                    IconButton(onClick = { scheduling = true }, enabled = canSend) {
+                        Icon(Lucide.Clock, contentDescription = "Schedule send")
+                    }
                     Button(
                         onClick = ::send,
                         enabled = canSend,
@@ -233,7 +407,7 @@ fun ComposeScreen(api: EmailApi, onDone: () -> Unit, reply: EmailMessage? = null
         ) {
             if (unconfirmed) Banner("Delivery unconfirmed — check Sent in the web UI", OdyColors.Warn)
             problem?.let { Banner(it, MaterialTheme.colorScheme.error) }
-            if (draft != null) {
+            if (reply != null) {
                 aiError?.let { message ->
                     Banner(message, MaterialTheme.colorScheme.error)
                     TextButton(
@@ -285,9 +459,16 @@ fun ComposeScreen(api: EmailApi, onDone: () -> Unit, reply: EmailMessage? = null
                         }
                     }
                 }
-                Field("To", to, { to = it }, KeyboardType.Email)
-                Field("Cc", cc, { cc = it }, KeyboardType.Email)
+                val locked = sending
+                RecipientField("To", api, isAdmin, toChips, { toChips = it }, toText, { toText = it }, !locked)
+                RecipientField("Cc", api, isAdmin, ccChips, { ccChips = it }, ccText, { ccText = it }, !locked)
+                if (showBcc || bccChips.isNotEmpty()) {
+                    RecipientField("Bcc", api, isAdmin, bccChips, { bccChips = it }, bccText, { bccText = it }, !locked)
+                } else {
+                    TextButton(onClick = { showBcc = true }) { Text("Add Bcc") }
+                }
                 Field("Subject", subject, { subject = it }, KeyboardType.Text)
+                AttachmentRow(staged, busy, ::unstage, enabled = !locked && busy == 0)
                 OutlinedTextField(
                     value = body,
                     onValueChange = { body = it },
@@ -317,11 +498,7 @@ private fun Field(label: String, value: String, onChange: (String) -> Unit, type
 }
 
 @Composable
-private fun fieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedContainerColor = OdyColors.InputBg,
-    unfocusedContainerColor = OdyColors.InputBg,
-    unfocusedBorderColor = MaterialTheme.colorScheme.outline,
-)
+private fun fieldColors() = composeFieldColors()
 
 /**
  * The web UI's "Context (optional)" box (static/js/emailLibrary/aiReply.js

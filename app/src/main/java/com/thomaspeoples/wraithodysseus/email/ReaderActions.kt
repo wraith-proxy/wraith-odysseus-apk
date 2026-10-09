@@ -64,7 +64,8 @@ fun replyAllDraft(original: EmailMessage, accountId: String?, mine: Collection<S
         val cc = ccOthers.filter { c -> toOthers.none { bareAddress(it) == bareAddress(c) } }.joinToString(", ")
         base.copy(to = to, cc = cc)
     } else {
-        base.copy(cc = (toOthers + ccOthers).joinToString(", "))
+        // Nobody twice, and not the sender, who is already the To.
+        base.copy(cc = addRecipients(listOf(original.fromAddress), toOthers + ccOthers).drop(1).joinToString(", "))
     }
 }
 
@@ -83,7 +84,7 @@ fun forwardSubject(subject: String): String {
  * its tags stripped, as the web does.
  */
 fun forwardDraft(original: EmailMessage, accountId: String?): SendRequest {
-    val text = original.body.ifEmpty { htmlToText(original.bodyHtml) }
+    val text = quoteText(original)
     val from = if (original.fromName.isBlank()) original.fromAddress else "${original.fromName} <${original.fromAddress}>"
     val body = buildString {
         append("\n\n---------- Forwarded message ----------\n")

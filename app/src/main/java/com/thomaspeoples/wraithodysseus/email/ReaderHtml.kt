@@ -117,13 +117,22 @@ fun readerDocument(bodyHtml: String, fg: String, link: String, rule: String): St
         "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" +
         "<style>${darkCss(fg, link, rule)}</style></head><body>${cleanMailHtml(bodyHtml)}</body></html>"
 
-/** A very rough plain text for mail that has HTML only (the web's own fallback for reply and forward). */
+/**
+ * A rough plain text for mail that has HTML only (the web's own fallback for
+ * reply and forward). Comments, <head>, <style> and <script> go with their
+ * contents first: the tag strip alone would leave a style block's CSS in the
+ * text, which is what ended up at the top of quoted replies.
+ */
 fun htmlToText(html: String): String = html
-    .replace(Regex("""<style[\s\S]*?</style>""", RegexOption.IGNORE_CASE), "")
-    .replace(Regex("""<script[\s\S]*?</script>""", RegexOption.IGNORE_CASE), "")
+    .replace(Regex("""<!--[\s\S]*?-->"""), "")
+    .replace(Regex("""<head\b[\s\S]*?</head\s*>""", RegexOption.IGNORE_CASE), "")
+    .replace(Regex("""<style\b[\s\S]*?</style\s*>""", RegexOption.IGNORE_CASE), "")
+    .replace(Regex("""<script\b[\s\S]*?</script\s*>""", RegexOption.IGNORE_CASE), "")
     .replace(Regex("""<br\s*/?>""", RegexOption.IGNORE_CASE), "\n")
     .replace(Regex("""</p>""", RegexOption.IGNORE_CASE), "\n\n")
+    .replace(Regex("""</(?:div|li|tr|h[1-6])\s*>""", RegexOption.IGNORE_CASE), "\n")
     .replace(Regex("""<[^>]+>"""), "")
     .replace("&nbsp;", " ").replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"").replace("&amp;", "&")
+    .replace(Regex("""[ \t]+\n"""), "\n")
     .replace(Regex("""\n{3,}"""), "\n\n")
     .trim()

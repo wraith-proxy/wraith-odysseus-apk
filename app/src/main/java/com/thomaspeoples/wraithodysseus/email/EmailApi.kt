@@ -13,7 +13,9 @@ import okhttp3.HttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
 import okhttp3.Request
+import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import okio.source
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -108,6 +110,10 @@ data class SendRequest(
     val references: String? = null,
     val sourceUid: String? = null,
     val sourceFolder: String? = null,
+    val bcc: String = "",
+    /** The recovery draft [EmailApi.sendWithRecovery] saved; /send deletes it once delivered. */
+    val draftUid: String? = null,
+    val draftFolder: String? = null,
     /** Compose-upload tokens (see [EmailApi.stageAttachment]) to attach. */
     val attachments: List<String> = emptyList(),
 )
@@ -129,6 +135,13 @@ data class CalendarImport(val imported: Int, val skipped: Int, val calendar: Str
 
 /** A fetched inline image: [mime] is the server's Content-Type. */
 class InlineImage(val mime: String, val bytes: ByteArray)
+
+/** A file uploaded by POST /compose-upload: [token] goes in /send's `attachments`. */
+data class StagedFile(val token: String, val filename: String, val size: Long)
+
+/** The IMAP draft POST /draft made. Either id is null when the server did not
+ * report it (no APPENDUID), in which case /send has nothing to delete. */
+data class DraftRef(val uid: String?, val folder: String?)
 
 sealed interface SendResult {
     data object Sent : SendResult
@@ -439,6 +452,114 @@ class EmailApi(private val http: Http, private val sendTimeoutSeconds: Long = Ht
             ?: throw ApiException(200, "Could not attach the file")
     }
 
+    /**
+     * POST /compose-upload, multipart field `file`. The bytes are read from
+     * [content] while the request is written, so a large file is never held
+     * in memory; it is called again if OkHttp has to re-send. A refusal (too
+     * big: HTTP 413) arrives as ApiException like any other.
+     */
+    suspend fun uploadAttachment(name: String, mime: String, content: () -> java.io.InputStream): StagedFile {
+        val type = runCatching { mime.toMediaType() }.getOrDefault("application/octet-stream".toMediaType())
+        val file = object : RequestBody() {
+            override fun contentType() = type
+            override fun writeTo(sink: okio.BufferedSink) {
+                content().use { sink.writeAll(it.source()) }
+            }
+        }
+        val form = MultipartBody.Builder().setType(MultipartBody.FORM).addFormDataPart("file", name, file).build()
+        val json = checkBody(http.call(Request.Builder().url(http.url("/api/email/compose-upload")).post(form).build(), UPLOAD_TIMEOUT_S))
+        val token = json.optString("token").takeIf { it.isNotBlank() && json.opt("success") == true }
+            ?: throw ApiException(200, "Could not upload the file")
+        return StagedFile(token, json.optString("filename", name), json.optLong("size"))
+    }
+
+    /** DELETE /compose-upload/{token}: drops a staged file that will not be sent. */
+    suspend fun removeAttachment(token: String) {
+        val url = http.url("/api/email").newBuilder().addPathSegment("compose-upload").addPathSegment(token).build()
+        checkBody(http.call(Request.Builder().url(url).delete().build()))
+    }
+
+    /**
+     * Contacts matching [query] for the recipient fields. An admin asks the
+     * address book (GET /api/contacts/search, admin only), and falls back to
+     * the senders the server has seen (GET /api/email/contacts) if that is
+     * refused or unavailable; everyone else goes straight to the fallback.
+     * Never throws for a failed lookup: no suggestions is the right answer.
+     */
+    suspend fun contacts(query: String, admin: Boolean): List<Contact> {
+        val q = query.trim()
+        if (q.isEmpty()) return emptyList()
+        if (admin) {
+            try {
+                return addressBook(q)
+            } catch (_: ApiException) {
+            } catch (_: IOException) {
+            }
+        }
+        return try {
+            seenSenders(q)
+        } catch (_: ApiException) {
+            emptyList()
+        } catch (_: IOException) {
+            emptyList()
+        }
+    }
+
+    private suspend fun addressBook(q: String): List<Contact> {
+        val url = http.url("/api/contacts/search").newBuilder().addQueryParameter("q", q).build()
+        val results = checkBody(http.call(get(url))).optJSONArray("results") ?: return emptyList()
+        return parseEach(results) { o ->
+            val name = o.optString("name")
+            val emails = o.optJSONArray("emails")
+            (0 until (emails?.length() ?: 0)).mapNotNull { emails?.optString(it)?.takeIf(String::isNotBlank) }.map { Contact(name, it) }
+        }.flatten()
+    }
+
+    private suspend fun seenSenders(q: String): List<Contact> {
+        val url = emailUrl(null, "contacts").addQueryParameter("q", q).build()
+        val list = checkBody(http.call(get(url))).optJSONArray("contacts") ?: return emptyList()
+        return parseEach(list) { o -> Contact(o.optString("name"), o.getString("address")) }
+    }
+
+    /**
+     * POST /draft: the recovery copy the web saves before every send.
+     * [previous] is the copy from an earlier attempt, which the server
+     * replaces. Timed out at 18s, as the web does.
+     */
+    suspend fun saveDraft(request: SendRequest, previous: DraftRef?): DraftRef {
+        val body = draftJson(request, previous).toString().toRequestBody(JSON)
+        val json = checkBody(http.call(Request.Builder().url(http.url("/api/email/draft")).post(body).build(), DRAFT_TIMEOUT_S, retry = false))
+        return DraftRef(
+            uid = json.optString("draft_uid").takeIf { it.isNotBlank() && it != "null" },
+            folder = json.optString("draft_folder").takeIf { it.isNotBlank() && it != "null" },
+        )
+    }
+
+    /**
+     * Saves a recovery draft, then sends with its ids so the server deletes
+     * it on delivery. As in the web, if the draft cannot be saved nothing is
+     * sent: a message that fails mid-send must stay recoverable. Returns the
+     * draft too, for the next attempt to replace rather than duplicate.
+     */
+    suspend fun sendWithRecovery(request: SendRequest, previous: DraftRef?): Pair<SendResult, DraftRef?> {
+        val draft = try {
+            saveDraft(request, previous)
+        } catch (e: ApiException) {
+            return SendResult.Failed("Not sent: could not save a recovery copy (${e.message})") to previous
+        } catch (e: IOException) {
+            return SendResult.Failed("Not sent: could not save a recovery copy (${describe(e)})") to previous
+        }
+        return send(request.copy(draftUid = draft.uid, draftFolder = draft.folder)) to draft
+    }
+
+    /** POST /schedule with send_at [sendAt] (UTC ISO, see [sendAtIso]). The
+     * server stores the mail and sends it itself; the phone can be off. */
+    suspend fun schedule(request: SendRequest, sendAt: String) {
+        val body = scheduleJson(request, sendAt).toString().toRequestBody(JSON)
+        val json = checkBody(http.call(Request.Builder().url(http.url("/api/email/schedule")).post(body).build(), retry = false))
+        if (json.opt("success") != true) throw ApiException(200, "Failed to schedule")
+    }
+
     suspend fun markUnread(accountId: String?, folder: String, uid: String) = mutate("mark-unread", accountId, folder, uid)
 
     /**
@@ -544,6 +665,8 @@ class EmailApi(private val http: Http, private val sendTimeoutSeconds: Long = Ht
          * inside the server's 45s request timeout. */
         const val PAGE_SIZE = 50
         const val DOWNLOAD_TIMEOUT_S = 60L
+        const val UPLOAD_TIMEOUT_S = 120L
+        const val DRAFT_TIMEOUT_S = 18L
         /** Just above the server's own 180s cut on the model call. */
         const val TRANSLATE_TIMEOUT_S = 190L
         const val MIN_SEARCH = 2
@@ -582,6 +705,7 @@ class EmailApi(private val http: Http, private val sendTimeoutSeconds: Long = Ht
         internal fun sendJson(r: SendRequest): JSONObject = JSONObject().apply {
             put("to", r.to)
             if (r.cc.isNotBlank()) put("cc", r.cc)
+            if (r.bcc.isNotBlank()) put("bcc", r.bcc)
             put("subject", r.subject)
             put("body", r.body)
             // Left out entirely in the no-accounts fallback, so the server
@@ -592,7 +716,44 @@ class EmailApi(private val http: Http, private val sendTimeoutSeconds: Long = Ht
             r.sourceUid?.let { put("source_uid", it) }
             r.sourceFolder?.let { put("source_folder", it) }
             if (r.attachments.isNotEmpty()) put("attachments", JSONArray(r.attachments))
+            if (r.draftUid != null && r.draftFolder != null) {
+                put("draft_uid", r.draftUid)
+                put("draft_folder", r.draftFolder)
+            }
             put("wait_for_delivery", true)
+        }
+
+        /** POST /draft takes the send model; the draft ids here name the
+         * previous copy the server replaces. No source_uid: a draft is not an answer. */
+        internal fun draftJson(r: SendRequest, previous: DraftRef?): JSONObject = JSONObject().apply {
+            put("to", r.to)
+            if (r.cc.isNotBlank()) put("cc", r.cc)
+            if (r.bcc.isNotBlank()) put("bcc", r.bcc)
+            put("subject", r.subject)
+            put("body", r.body)
+            r.accountId?.let { put("account_id", it) }
+            r.inReplyTo?.let { put("in_reply_to", it) }
+            r.references?.let { put("references", it) }
+            if (r.attachments.isNotEmpty()) put("attachments", JSONArray(r.attachments))
+            if (previous?.uid != null && previous.folder != null) {
+                put("draft_uid", previous.uid)
+                put("draft_folder", previous.folder)
+            }
+        }
+
+        /** POST /schedule: to, cc, bcc, subject, body, threading, tokens and
+         * send_at as UTC ISO. The server stores no source_uid or draft ids. */
+        internal fun scheduleJson(r: SendRequest, sendAt: String): JSONObject = JSONObject().apply {
+            put("to", r.to)
+            if (r.cc.isNotBlank()) put("cc", r.cc)
+            if (r.bcc.isNotBlank()) put("bcc", r.bcc)
+            put("subject", r.subject)
+            put("body", r.body)
+            r.accountId?.let { put("account_id", it) }
+            r.inReplyTo?.let { put("in_reply_to", it) }
+            r.references?.let { put("references", it) }
+            if (r.attachments.isNotEmpty()) put("attachments", JSONArray(r.attachments))
+            put("send_at", sendAt)
         }
     }
 }
