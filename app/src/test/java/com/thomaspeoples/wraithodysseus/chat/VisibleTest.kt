@@ -123,4 +123,46 @@ class VisibleTest {
         assertEquals("Short.", stripRewriteThinking("<think>Short."))
         assertEquals("Short.", stripRewriteThinking("  Short.  "))
     }
+
+    // -- linear-time guards (see the note at the top of Visible.kt) -------
+
+    @Test(timeout = 5_000)
+    fun longWhitespaceRunsTakeLinearTime() {
+        // Each of these took seconds at 30,000 characters before the guards,
+        // and grows with the square of the length.
+        val run = "\n".repeat(100_000)
+        visibleUserText(run, hasAttachments = true)
+        visibleUserText("[Image: a]\n${run}x", hasAttachments = true)
+        visibleUserText("=== File: f ===\n[Type: t]\n\nx${run}x", hasAttachments = true)
+        visibleUserText("[PDF content]:${run}x", hasAttachments = true)
+        stripToolBlocks(" ".repeat(100_000))
+        stripToolBlocks("stdout: a\n${" ".repeat(100_000)}b")
+    }
+
+    @Test
+    fun guardedPatternsMatchExactlyWhereTheWebsPatternsDo() {
+        // The patterns as ported from the web, before the guards.
+        val pairs = listOf(
+            VISION_BLOCK to """\n*\[Image: ([^\]]+)\]\n[\s\S]*?(?=\n*\[Image: |\n*\[Image attached: |\n*=== File: |\n*\[PDF content\]:|\z)""",
+            FILE_BLOCK_FENCED to """\n*=== File: .+? ===\n\[Type: .+?\]\n+```[\s\S]*?```""",
+            FILE_BLOCK_PLAIN to """\n*=== File: .+? ===\n\[Type: .+?\]\n+[\s\S]*?(?=\n*=== File:|\z)""",
+            PDF_BLOCK to """\n*\[PDF content[^\]]*\]:[\s\S]*?(?=\n*\[PDF content[^\]]*\]:|\n*=== File:|\z)""",
+            IMAGE_MARKER to """\n*\[Image attached: [^\]]+\]""",
+            ATTACHED_MARKER to """\n*\[Attached (?:document|non-text) file\]""",
+        ).map { (new, old) -> new to Regex(old) } +
+            (TOOL_NARRATION to Regex("""(?:The (?:result|output) shows?:?\s*)?-?\s*(?:stdout|stderr|exit_code):\s*.+""", RegexOption.IGNORE_CASE))
+        val tokens = listOf(
+            "\n", "\n", "\n\n", " ", " ", "\t", "x", "]", "-", "T", "```",
+            "[Image: a]", "[Image: a]\n", "[Image attached: b]", "=== File: f ===\n[Type: t]\n", "=== File: ",
+            "[PDF content]:", "[PDF content p]:", "[Attached document file]", "[Attached non-text file]",
+            "stdout: o", "STDERR:", "exit_code: 1", "The result shows: ", "The output show",
+        )
+        val random = java.util.Random(7)
+        repeat(20_000) {
+            val text = buildString { repeat(random.nextInt(14)) { append(tokens[random.nextInt(tokens.size)]) } }
+            for ((new, old) in pairs) {
+                assertEquals(text, old.findAll(text).map { it.range }.toList(), new.findAll(text).map { it.range }.toList())
+            }
+        }
+    }
 }

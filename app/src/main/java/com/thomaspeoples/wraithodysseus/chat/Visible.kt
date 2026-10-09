@@ -9,20 +9,33 @@ package com.thomaspeoples.wraithodysseus.chat
  *
  * Every regex is the web's, with JS `$` written `\z`: Java's `$` also matches
  * before a final newline, JS's does not.
+ *
+ * The patterns that open with `\n*` (or `\s*`) also carry a guard, [NL_START],
+ * so a match cannot start inside a run of newlines except where the last
+ * match ended (`\G`). A match starting mid-run means one a character earlier
+ * also matches, so the leftmost match, and the result, are the same. Without
+ * the guard, every position of a long run rescans the rest of it: 30,000
+ * newlines in an attached file froze the chat for seconds on each history
+ * load. The guards inside the lookaheads do the same for the lazy bodies.
+ * VisibleTest checks both the timing and the equivalence, hence `internal`.
  */
+
+private const val NL_START = """(?:\G|(?<!\n)|(?!\n))"""
+private const val NL_AHEAD = """(?:(?<!\n)|(?!\n))"""
 
 /** static/js/sessions.js:168 `_stripUserVisionBlocks` (same pattern as
  * chatRenderer.js:3569): "[Image: name]" plus the description under it. */
-private val VISION_BLOCK = Regex(
-    """\n*\[Image: ([^\]]+)\]\n[\s\S]*?(?=\n*\[Image: |\n*\[Image attached: |\n*=== File: |\n*\[PDF content\]:|\z)""",
+internal val VISION_BLOCK = Regex(
+    // (?<=\]\n): the body may end at once, before the header's own newline run.
+    """$NL_START\n*\[Image: ([^\]]+)\]\n[\s\S]*?(?=(?:$NL_AHEAD|(?<=\]\n))\n*(?:\[Image: |\[Image attached: |=== File: |\[PDF content\]:)|\z)""",
 )
 
 /** chatRenderer.js:3577-3583, applied only when the row has attachments. */
-private val FILE_BLOCK_FENCED = Regex("""\n*=== File: .+? ===\n\[Type: .+?\]\n+```[\s\S]*?```""")
-private val FILE_BLOCK_PLAIN = Regex("""\n*=== File: .+? ===\n\[Type: .+?\]\n+[\s\S]*?(?=\n*=== File:|\z)""")
-private val PDF_BLOCK = Regex("""\n*\[PDF content[^\]]*\]:[\s\S]*?(?=\n*\[PDF content[^\]]*\]:|\n*=== File:|\z)""")
-private val IMAGE_MARKER = Regex("""\n*\[Image attached: [^\]]+\]""")
-private val ATTACHED_MARKER = Regex("""\n*\[Attached (?:document|non-text) file\]""")
+internal val FILE_BLOCK_FENCED = Regex("""$NL_START\n*=== File: .+? ===\n\[Type: .+?\]\n+```[\s\S]*?```""")
+internal val FILE_BLOCK_PLAIN = Regex("""$NL_START\n*=== File: .+? ===\n\[Type: .+?\]\n+[\s\S]*?(?=$NL_AHEAD\n*=== File:|\z)""")
+internal val PDF_BLOCK = Regex("""$NL_START\n*\[PDF content[^\]]*\]:[\s\S]*?(?=$NL_AHEAD\n*(?:\[PDF content[^\]]*\]:|=== File:)|\z)""")
+internal val IMAGE_MARKER = Regex("""$NL_START\n*\[Image attached: [^\]]+\]""")
+internal val ATTACHED_MARKER = Regex("""$NL_START\n*\[Attached (?:document|non-text) file\]""")
 
 /** chatRenderer.js:3480-3487: a supervisor self-check is an internal signal. */
 private val SELF_CHECK = Regex("""^\s*\[Task\]\s+Self-check:""", RegexOption.IGNORE_CASE)
@@ -78,8 +91,11 @@ private val QWEN_BARE_MARKER = Regex(
     """(?:^|[\t\r\n ])(?:/?\|end\||\|end|end\|)(?=[\t\r\n ]|\z)|(?:^|[\r\n])[ \t]*assistan(?:t)?[ \t]*(?=[\r\n]|\z)""",
     setOf(RegexOption.IGNORE_CASE),
 )
-private val TOOL_NARRATION = Regex(
-    """(?:The (?:result|output) shows?:?\s*)?-?\s*(?:stdout|stderr|exit_code):\s*.+""",
+internal val TOOL_NARRATION = Regex(
+    // Guarded like NL_START, for whitespace: a match starting on whitespace
+    // after whitespace can only be the bare `\s*stdout:` form, which also
+    // matches a character earlier.
+    """(?:\G|(?<!\s)|(?!\s))(?:The (?:result|output) shows?:?\s*)?-?\s*(?:stdout|stderr|exit_code):\s*.+""",
     RegexOption.IGNORE_CASE,
 )
 private val BLANK_RUNS = Regex("""\n{3,}""")
