@@ -1,5 +1,6 @@
 package com.thomaspeoples.wraithodysseus.ui.common
 
+import androidx.compose.ui.text.LinkAnnotation
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -74,5 +75,15 @@ class MarkdownTest {
     fun mermaidAndMathStayCodeBlocks() {
         assertEquals(listOf("<mono>graph TD; A-->B"), prose("```mermaid\ngraph TD; A-->B\n```"))
         assertEquals(listOf("<mono>E = mc^2"), prose("```math\nE = mc^2\n```"))
+    }
+
+    @Test
+    fun onlyWebLinksAreTappable() {
+        val text = (markdownBlocks("[a](tel:123) [b](javascript:x) [c](intent://x) [d](HTTPS://example.com) [e](http://lan)").single() as MdBlock.Prose).text
+        assertEquals("a b c d e", text.text)
+        assertEquals(
+            listOf("HTTPS://example.com", "http://lan"),
+            text.getLinkAnnotations(0, text.length).map { (it.item as LinkAnnotation.Url).url },
+        )
     }
 }

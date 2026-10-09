@@ -29,6 +29,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
+import com.thomaspeoples.wraithodysseus.ui.chat.parts.isWebUrl
 import com.thomaspeoples.wraithodysseus.ui.icons.Lucide
 import kotlinx.coroutines.launch
 import androidx.compose.ui.text.AnnotatedString
@@ -218,7 +219,13 @@ private class MdRenderer {
                 is Code -> b.withStyle(InlineCode) { append(node.literal) }
                 is Emphasis -> b.withStyle(SpanStyle(fontStyle = FontStyle.Italic)) { inlines(node) }
                 is StrongEmphasis -> b.withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { inlines(node) }
-                is Link -> b.withLink(LinkAnnotation.Url(node.destination, LinkStyles)) { inlines(node) }
+                // Only web links tap through: model output can carry any scheme
+                // (tel:, sms:, other apps' deep links), and the target is hidden.
+                is Link -> if (isWebUrl(node.destination)) {
+                    b.withLink(LinkAnnotation.Url(node.destination, LinkStyles)) { inlines(node) }
+                } else {
+                    inlines(node)
+                }
                 is Image -> b.append(plain(node).ifEmpty { "image" })
                 is SoftLineBreak -> b.append(" ")
                 is HardLineBreak -> b.append("\n")
