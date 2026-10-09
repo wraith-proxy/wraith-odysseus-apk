@@ -1,0 +1,4 @@
+{"active":[
+ {"session_id":"rp-run111","query":"Compare Ryzen 9 vs Core i9","status":"running","progress":{"phase":"reading","round":2,"total_sources":9,"queries":4},"source_state":"9 sources read","source_coverage":{},"navigation_trace":[{"tool":"fetch","status":"ok","title":"AnandTech review","url":"https://example.com/a","results":3,"source_kind":"review","source_score":82.0,"retrieval":"browser"}],"action_trace":[{"round":2,"tool":"search","query":"ryzen 9 benchmark","source":"searxng","requested_by":"planner"},{"tool":"fetch","url":"https://example.com/x","status":"skipped","reason":"paywall"}],"started_at":1760000100.25,"category":"comparison","mode":"research"},
+ {"query":"No session id, dropped"}
+]}

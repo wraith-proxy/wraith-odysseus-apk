@@ -1,0 +1,8 @@
+data: {"phase": "probing", "model": "gpt-x", "status": "running", "category": "", "mode": "research"}
+
+data: {"phase": "searching", "round": 1, "queries": 3, "status": "running", "category": "product", "mode": "research", "action_trace": [{"round": 1, "tool": "search", "query": "nas"}]}
+
+data: {"phase": "writing", "total_sources": 7, "status": "running", "category": "product", "mode": "research", "source_state": "7 sources"}
+
+data: {"status": "done", "final": true}
+
