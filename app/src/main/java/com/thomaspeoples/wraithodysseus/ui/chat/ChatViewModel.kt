@@ -22,13 +22,20 @@ import com.thomaspeoples.wraithodysseus.chat.RunStream
 import com.thomaspeoples.wraithodysseus.chat.Toggles
 import com.thomaspeoples.wraithodysseus.chat.ToolApproval
 import com.thomaspeoples.wraithodysseus.chat.TurnState
+import com.thomaspeoples.wraithodysseus.chat.splitThinking
+import com.thomaspeoples.wraithodysseus.chat.stripToolBlocks
+import com.thomaspeoples.wraithodysseus.chat.visibleAssistantText
 import com.thomaspeoples.wraithodysseus.chat.UploadedFile
 import com.thomaspeoples.wraithodysseus.net.ApiException
+import com.thomaspeoples.wraithodysseus.ui.common.userMessage
 import java.io.IOException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import org.json.JSONException
 
@@ -70,6 +77,17 @@ class ChatViewModel(
     var ask by mutableStateOf<AskUser?>(null)
         private set
     var error by mutableStateOf<String?>(null)
+
+    /** Failures (and short confirmations) of message actions, for the
+     * screen's snackbar. A channel, not state: each is shown once, and one
+     * raised while the screen is away waits for it. */
+    private val noticeChannel = Channel<String>(Channel.BUFFERED)
+    val notices: Flow<String> = noticeChannel.receiveAsFlow()
+
+    /** The rewrite streaming into the last reply, shown in its place until
+     * it is saved; null when none is running. */
+    var rewriting by mutableStateOf<String?>(null)
+        private set
 
     var models by mutableStateOf<List<ModelChoice>>(emptyList())
         private set
@@ -146,6 +164,185 @@ class ChatViewModel(
             if (draft.isBlank()) draft = text
             attachments = sent + attachments
         }) { api.chatStream(request(text, sent.map { it.id }, null)) }
+    }
+
+    // -- message actions ---------------------------------------------------
+    //
+    // Everything below needs the message's database id (the server addresses
+    // rows by it, never by position) and is refused while a run is going: an
+    // action that cuts the history under a live run would corrupt it.
+
+    /** The rows the web UI deletes with [m] (chat.js:7593 deleteMessage): a
+     * user message takes the reply that follows it, a reply the message it
+     * answers. [m] comes first. */
+    fun deletionOf(m: HistoryMessage): List<HistoryMessage> {
+        val i = messages.indexOfFirst { it.dbId != null && it.dbId == m.dbId }
+        if (i < 0) return listOf(m)
+        val other = if (m.role == "user") {
+            messages.drop(i + 1).takeWhile { it.role != "user" }.firstOrNull { it.role == "assistant" }
+        } else {
+            messages.take(i).lastOrNull { it.role == "user" }
+        }
+        return listOfNotNull(m, other)
+    }
+
+    fun delete(m: HistoryMessage) {
+        if (m.dbId == null) return
+        val ids = deletionOf(m).mapNotNull { it.dbId }
+        act {
+            api.deleteMessages(sessionId, ids)
+            messages = messages.filter { it.dbId !in ids }
+            say("Message deleted")
+        }
+    }
+
+    /** Edit saved. A user message is cut off and sent again as the edited
+     * text (the reply it had no longer fits); a reply is edited in place. */
+    fun edit(m: HistoryMessage, text: String) {
+        val id = m.dbId ?: return
+        if (running) return
+        if (m.role == "user") {
+            replay(id, text.trim(), m.attachments)
+            return
+        }
+        if (text == visibleForEdit(m)) return
+        act {
+            api.editMessage(sessionId, id, text)
+            val inlineThinking = splitThinking(m.raw).thinking
+            val split = splitThinking(text)
+            val at = messages.indexOfFirst { it.dbId == id }
+            if (at >= 0) messages = messages.toMutableList().also { it[at] = m.copy(content = split.answer, raw = text) }
+            // Reasoning is shown from the text too: let the server's copy decide.
+            if (split.thinking != inlineThinking) reloadHistory()
+            say("Message edited")
+        }
+    }
+
+    /** What an assistant edit starts from: the stored text without tool
+     * blocks, think tags kept, as the web's editor does (chat.js:7715). */
+    fun visibleForEdit(m: HistoryMessage): String = if (m.role == "user") m.content else stripToolBlocks(m.raw)
+
+    fun resend(m: HistoryMessage) {
+        val id = m.dbId ?: return
+        replay(id, m.content, m.attachments)
+    }
+
+    /** The user message the reply [m] answers, if it is loaded. */
+    fun questionOf(m: HistoryMessage): HistoryMessage? {
+        val i = messages.indexOfFirst { it.dbId != null && it.dbId == m.dbId }
+        return if (i < 0) null else messages.take(i).lastOrNull { it.role == "user" && it.dbId != null }
+    }
+
+    fun regenerate(m: HistoryMessage) {
+        val q = questionOf(m)
+        if (q == null) {
+            say("Load earlier messages first: the question is not on screen")
+            return
+        }
+        resend(q)
+    }
+
+    /** Rewrite rewrites the server's last assistant row, so only that reply offers it. */
+    fun isLastReply(m: HistoryMessage): Boolean =
+        m.role == "assistant" && m.dbId != null && messages.lastOrNull { it.role == "assistant" }?.dbId == m.dbId
+
+    fun rewrite(m: HistoryMessage, instruction: String) {
+        val id = m.dbId ?: return
+        if (!isLastReply(m)) return
+        val original = visibleAssistantText(m.raw)
+        if (original.isBlank()) {
+            say("No text to rewrite")
+            return
+        }
+        act {
+            rewriting = ""
+            try {
+                val text = api.rewrite(sessionId, original, instruction) { rewriting = it }
+                val at = messages.indexOfFirst { it.dbId == id }
+                if (at >= 0) messages = messages.toMutableList().also { it[at] = m.copy(content = text, raw = text) }
+                reloadHistory()
+            } finally {
+                rewriting = null
+            }
+        }
+    }
+
+    /** Copies the chat up to and including [m] into a new one and hands its
+     * id to [onOpen]. */
+    fun fork(m: HistoryMessage, onOpen: (String) -> Unit) {
+        val id = m.dbId ?: return
+        act {
+            val keep = if (messages.lastOrNull()?.dbId == id) {
+                // The last reply: keep everything, whatever hidden rows follow.
+                Int.MAX_VALUE
+            } else {
+                val shownBefore = messages.takeWhile { it.dbId != id }.count { it.dbId != null }
+                api.forkKeepCount(sessionId, id, offset + shownBefore)
+            }
+            if (keep == null) {
+                say("Could not tell where to fork this chat; fork from its last reply instead")
+                return@act
+            }
+            val forked = api.fork(sessionId, keep)
+            say("Forked: ${forked.name}")
+            onOpen(forked.id)
+        }
+    }
+
+    /** Cut the chat off before the message [fromId], then send [text] (with
+     * [files]) in its place. Used by edit, resend and regenerate, so the
+     * toggles and model are the composer's. */
+    private fun replay(fromId: String, text: String, files: List<UploadedFile>) {
+        if (running || (text.isEmpty() && files.isEmpty())) return
+        ask = null
+        val bubble = HistoryMessage("user", text, null, null, files)
+        // After the cut the server has lost the message for good, so if the
+        // stream then fails to open the text goes back to the composer.
+        start(rejected = {
+            if (draft.isBlank()) draft = text
+            viewModelScope.launch { reloadHistory() }
+        }) {
+            try {
+                api.truncate(sessionId, fromId)
+            } catch (e: ApiException) {
+                notice(e)
+                return@start null
+            } catch (e: IOException) {
+                notice(e)
+                return@start null
+            } catch (e: JSONException) {
+                notice(e)
+                return@start null
+            }
+            val at = messages.indexOfFirst { it.dbId == fromId }
+            messages = (if (at >= 0) messages.subList(0, at) else messages) + bubble
+            api.chatStream(request(text, files.map { it.id }, null))
+        }
+    }
+
+    /** One non-streaming action at a time, the composer locked meanwhile. */
+    private fun act(block: suspend () -> Unit) {
+        if (running) return
+        running = true
+        viewModelScope.launch {
+            try {
+                block()
+            } catch (e: ApiException) {
+                notice(e)
+            } catch (e: IOException) {
+                notice(e)
+            } catch (e: JSONException) {
+                notice(e)
+            } finally {
+                running = false
+            }
+        }
+    }
+
+    private fun notice(e: Exception) = say(userMessage(e))
+
+    private fun say(text: String) {
+        noticeChannel.trySend(text)
     }
 
     /** A plain ask_user answer: the picked labels, sent as a message. */

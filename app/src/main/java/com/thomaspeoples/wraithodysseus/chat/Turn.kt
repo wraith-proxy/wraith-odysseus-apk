@@ -42,6 +42,33 @@ fun splitThinking(raw: String): Split {
 
 data class AskOption(val label: String, val description: String, val value: String?)
 
+/**
+ * What a tool-approval gate will run: the "action" object of the server's
+ * public_payload (src/tool_approvals.py:196-249). [content] is the complete
+ * sealed input -- the command, path or JSON arguments -- so the person
+ * approves what will actually happen rather than only the question.
+ */
+data class ApprovalAction(
+    val tool: String,
+    val content: String,
+    val effects: List<String>,
+    val workspace: String?,
+    val documentId: String?,
+    val documentVersion: Int?,
+    val digest: String?,
+) {
+    /** The same lines, in the same order, as the web card (chatRenderer.js:3047). */
+    fun lines(): List<String> = listOfNotNull(
+        tool.ifBlank { "tool" },
+        content.ifEmpty { null },
+        effects.takeIf { it.isNotEmpty() }?.let { "Effects: ${it.joinToString(", ")}" },
+        workspace?.let { "Workspace: $it" },
+        documentId?.let { "Document: $it" },
+        documentVersion?.let { "Document version: $it" },
+        digest?.let { "Approval fingerprint: $it" },
+    )
+}
+
 /** A plain ask_user question, or (with [approvalId]) a tool-approval gate,
  * whose options carry the decision `value` to re-POST. */
 data class AskUser(
@@ -50,6 +77,7 @@ data class AskUser(
     val options: List<AskOption>,
     val multi: Boolean,
     val approvalId: String?,
+    val action: ApprovalAction? = null,
 )
 
 /**
@@ -115,6 +143,20 @@ data class TurnState(
             },
             multi = d.optBoolean("multi", false),
             approvalId = if (d.str("kind") == "tool_approval") d.str("approval_id") else null,
+            action = d.optJSONObject("action")?.let(::parseAction),
+        )
+    }
+
+    private fun parseAction(a: JSONObject): ApprovalAction {
+        val effects = a.optJSONArray("effects")
+        return ApprovalAction(
+            tool = a.str("tool").orEmpty(),
+            content = a.str("content").orEmpty(),
+            effects = (0 until (effects?.length() ?: 0)).mapNotNull { effects?.optString(it)?.ifBlank { null } },
+            workspace = a.str("workspace")?.ifBlank { null },
+            documentId = a.str("document_id")?.ifBlank { null },
+            documentVersion = if (a.isNull("document_version")) null else a.optInt("document_version"),
+            digest = a.str("digest")?.ifBlank { null },
         )
     }
 }

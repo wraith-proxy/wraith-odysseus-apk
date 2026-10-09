@@ -1,12 +1,16 @@
 package com.thomaspeoples.wraithodysseus.ui.chat
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -21,10 +25,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.thomaspeoples.wraithodysseus.chat.AskOption
 import com.thomaspeoples.wraithodysseus.chat.AskUser
 import com.thomaspeoples.wraithodysseus.ui.theme.Muted
+import com.thomaspeoples.wraithodysseus.ui.theme.OdyColors
 import com.thomaspeoples.wraithodysseus.ui.theme.SheetShape
 
 /** Plain ask_user: a tap answers, or with [AskUser.multi] the picks are
@@ -67,6 +74,21 @@ internal fun ApprovalSheet(ask: AskUser, onDecide: (AskOption) -> Unit) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(ask.question, style = MaterialTheme.typography.titleMedium)
             if (ask.description.isNotBlank()) Text(ask.description, color = Muted, style = MaterialTheme.typography.bodySmall)
+            // What will actually run: without it the approval is blind.
+            ask.action?.let { action ->
+                Text(
+                    action.lines().joinToString("\n"),
+                    fontFamily = FontFamily.Monospace,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 220.dp)
+                        .clip(MaterialTheme.shapes.small)
+                        .background(OdyColors.CodeBg)
+                        .verticalScroll(rememberScrollState())
+                        .padding(10.dp),
+                )
+            }
             ask.options.filter { it.value != null }.forEach { o ->
                 OutlinedButton(onClick = { onDecide(o) }, modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.fillMaxWidth()) {

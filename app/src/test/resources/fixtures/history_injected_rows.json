@@ -1,0 +1,15 @@
+{
+  "history": [
+    {"role": "user", "content": "Summarise this\n\n=== File: notes.py ===\n[Type: python, Lines: 2, Size: 31 bytes]\n\n```python\nprint('hi')\nprint('bye')\n```\n\n[Image: whiteboard.png]\nA whiteboard with three boxes joined by arrows.", "metadata": {"_db_id": "m-01", "attachments": [{"id": "f-1", "name": "notes.py", "mime": "text/x-python"}, {"id": "f-2", "name": "whiteboard.png", "mime": "image/png"}]}},
+    {"role": "assistant", "content": "It prints two lines.", "metadata": {"_db_id": "m-02"}},
+    {"role": "user", "content": "Your previous response was interrupted. Continue exactly where you left off.", "metadata": {"_db_id": "m-03"}},
+    {"role": "assistant", "content": "[Task] Self-check: t-77", "metadata": {"_db_id": "m-04", "wake_check_in": true}},
+    {"role": "user", "content": "Did you finish?", "metadata": {"_db_id": "m-05", "hidden_from_user_view": true}},
+    {"role": "user", "content": "A line a person typed:\n=== File: not-an-upload ===", "metadata": {"_db_id": "m-06"}},
+    {"role": "assistant", "content": "Done.", "metadata": {"_db_id": "m-07"}}
+  ],
+  "offset": 0,
+  "limit": 50,
+  "total": 7,
+  "has_more_before": false
+}

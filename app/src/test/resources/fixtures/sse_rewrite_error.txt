@@ -1,0 +1,3 @@
+event: error
+data: {"error": "Cannot reach llm.example.internal:8080", "status": 500}
+

@@ -10,6 +10,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.Request
@@ -46,7 +47,13 @@ data class HistoryMessage(
     val dbId: String?,
     val thinking: String?,
     val attachments: List<UploadedFile>,
+    /** The stored text before the think split, for an assistant edit: saving
+     * the split-out [content] would drop the reasoning from the server's copy. */
+    val raw: String = content,
 )
+
+/** POST /api/session/{sid}/fork. */
+data class ForkResult(val id: String, val name: String, val kept: Int)
 
 /** GET /api/history/{sid}?limit=50[&offset]. No offset means the last page;
  * the server returns rows [offset, offset + limit), so an older page is
@@ -195,6 +202,93 @@ class ChatApi(private val http: Http) {
         http.open(get("/api/upload/${seg(fileId)}?thumb=1"), Http.JSON_TIMEOUT_S).use { it.body?.bytes() ?: ByteArray(0) }
     }
 
+    /**
+     * Cuts the chat off just before one message and everything after it
+     * (history_routes.py:390). Always by the message's database id: list
+     * indexes drift when the server hides rows. Never retried, because a
+     * repeat after a lost answer finds the message gone and says 404.
+     */
+    suspend fun truncate(sessionId: String, beforeMsgId: String): Int {
+        require(beforeMsgId.isNotBlank()) { "before_msg_id" }
+        val body = JSONObject().put("before_msg_id", beforeMsgId)
+        val request = post("/api/session/${seg(sessionId)}/truncate", jsonBody(body))
+        return JSONObject(http.call(request, retry = false)).optInt("kept", 0)
+    }
+
+    /** history_routes.py:447. Deleting an id twice is harmless, so it may retry. */
+    suspend fun deleteMessages(sessionId: String, ids: List<String>) {
+        require(ids.isNotEmpty() && ids.none { it.isBlank() }) { "msg_ids" }
+        val body = JSONObject().put("msg_ids", JSONArray(ids))
+        http.call(post("/api/session/${seg(sessionId)}/delete-messages", jsonBody(body)))
+    }
+
+    /** history_routes.py:527: replaces the stored text of one message. */
+    suspend fun editMessage(sessionId: String, msgId: String, content: String) {
+        require(msgId.isNotBlank()) { "msg_id" }
+        val body = JSONObject().put("msg_id", msgId).put("content", content)
+        http.call(post("/api/session/${seg(sessionId)}/edit-message", jsonBody(body)))
+    }
+
+    /** history_routes.py:782. Not retried: a repeat would make a second chat. */
+    suspend fun fork(sessionId: String, keepCount: Int): ForkResult {
+        val body = JSONObject().put("keep_count", keepCount)
+        val o = JSONObject(http.call(post("/api/session/${seg(sessionId)}/fork", jsonBody(body)), retry = false))
+        return ForkResult(o.getString("id"), o.str("name").orEmpty(), o.optInt("kept", 0))
+    }
+
+    /**
+     * The `keep_count` that makes a fork end with message [dbId].
+     *
+     * The server slices its in-memory history, which is every stored row in
+     * order (session_manager.py:165-195, hidden and tool rows included),
+     * while /api/history drops the hidden ones and the app drops the tool
+     * ones. So the position cannot be counted from what the app holds; it is
+     * found instead. A page [lowerBound, lowerBound + width) contains the
+     * message exactly when width > its position - lowerBound, so the smallest
+     * such width is found by bisection, and keep_count is lowerBound + width.
+     * [lowerBound] must be at or before the message's row (the first shown
+     * row's offset plus the shown rows before it is). Null when the message
+     * is not within [MAX_WINDOW] rows of it, i.e. the answer is not known.
+     */
+    suspend fun forkKeepCount(sessionId: String, dbId: String, lowerBound: Int): Int? {
+        suspend fun within(width: Int) = history(sessionId, lowerBound, width).messages.any { it.dbId == dbId }
+        if (!within(MAX_WINDOW)) return null
+        var lo = 1
+        var hi = MAX_WINDOW
+        while (lo < hi) {
+            val mid = (lo + hi) / 2
+            if (within(mid)) hi = mid else lo = mid + 1
+        }
+        return lowerBound + lo
+    }
+
+    /**
+     * POST /api/rewrite (chat_routes.py:5023): asks the model to rewrite
+     * [original] by [instruction] and saves the result over the session's
+     * LAST assistant row, so callers offer it for the last reply only.
+     * [onText] gets the cleaned text so far as it streams. Reasoning deltas
+     * are not part of the rewrite. Returns the final text.
+     */
+    suspend fun rewrite(sessionId: String, original: String, instruction: String, onText: (String) -> Unit): String {
+        val body = JSONObject()
+            .put("session_id", sessionId)
+            .put("original_text", original)
+            .put("instruction", instruction)
+        val response = http.open(post("/api/rewrite", jsonBody(body)), Http.STREAM_TIMEOUT_S, retry = false)
+        val text = StringBuilder()
+        response.sseFrames().map(SseParser::decode).collect { e ->
+            when (e) {
+                is SseEvent.Delta -> if (!e.thinking) {
+                    text.append(e.text)
+                    onText(stripRewriteThinking(text.toString()))
+                }
+                is SseEvent.Error -> throw ApiException(e.status ?: 500, e.message)
+                else -> Unit
+            }
+        }
+        return stripRewriteThinking(text.toString()).ifEmpty { throw ApiException(502, "The model returned no rewritten text") }
+    }
+
     suspend fun search(query: String, limit: Int = 25): List<SearchHit> {
         val url = http.url("/api/search").newBuilder()
             .addQueryParameter("q", query)
@@ -221,11 +315,15 @@ class ChatApi(private val http: Http) {
 
     private fun get(path: String) = Request.Builder().url(http.url(path)).build()
 
+    private fun jsonBody(o: JSONObject) = o.toString().toRequestBody("application/json".toMediaType())
+
     private fun post(path: String, body: okhttp3.RequestBody) =
         Request.Builder().url(http.url(path)).post(body).build()
 
     companion object {
         const val PAGE = 50
+        /** The most rows the server gives for one /api/history request. */
+        const val MAX_WINDOW = 100
         private const val RUN_ID = "X-Odysseus-Run-Id"
 
         /** Model ids the server itself refuses to pick as a chat default. */
@@ -287,25 +385,39 @@ class ChatApi(private val http: Http) {
             val arr = o.optJSONArray("history") ?: JSONArray()
             val messages = (0 until arr.length()).map(arr::getJSONObject)
                 .filter { it.str("role") == "user" || it.str("role") == "assistant" }
-                .map { m ->
+                .mapNotNull { m ->
+                    val role = m.getString("role")
                     val meta = m.optJSONObject("metadata")
+                    // An entry without an id cannot be fetched; it is skipped
+                    // rather than failing the whole page.
+                    val attachments = meta?.optJSONArray("attachments")?.let { a ->
+                        (0 until a.length()).mapNotNull { a.optJSONObject(it) }.mapNotNull {
+                            val id = it.str("id") ?: return@mapNotNull null
+                            UploadedFile(id, it.str("name").orEmpty(), it.str("mime").orEmpty())
+                        }
+                    } ?: emptyList()
                     val text = contentText(m.opt("content"))
-                    val split = if (m.str("role") == "assistant") splitThinking(text) else Split(text, "")
+                    // What the web shows of a user row; see Visible.kt.
+                    val shown = if (role == "user") visibleUserText(text, attachments.isNotEmpty()) else text
+                    if (isHiddenTurn(
+                            role,
+                            shown,
+                            wakeCheckIn = meta?.optBoolean("wake_check_in", false) == true,
+                            hiddenFromUserView = meta?.optBoolean("hidden_from_user_view", false) == true,
+                        )
+                    ) {
+                        return@mapNotNull null
+                    }
+                    val split = if (role == "assistant") splitThinking(shown) else Split(shown, "")
                     val thinking = listOfNotNull(meta?.str("thinking"), split.thinking.ifBlank { null })
                         .joinToString("\n").ifBlank { null }
                     HistoryMessage(
-                        role = m.getString("role"),
+                        role = role,
                         content = split.answer,
                         dbId = meta?.str("_db_id"),
                         thinking = thinking,
-                        // An entry without an id cannot be fetched; it is skipped
-                        // rather than failing the whole page.
-                        attachments = meta?.optJSONArray("attachments")?.let { a ->
-                            (0 until a.length()).mapNotNull { a.optJSONObject(it) }.mapNotNull {
-                                val id = it.str("id") ?: return@mapNotNull null
-                                UploadedFile(id, it.str("name").orEmpty(), it.str("mime").orEmpty())
-                            }
-                        } ?: emptyList(),
+                        attachments = attachments,
+                        raw = shown,
                     )
                 }
             return HistoryPage(

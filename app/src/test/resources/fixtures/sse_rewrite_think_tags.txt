@@ -1,0 +1,6 @@
+data: {"delta": "<think>shorter, shorter</think>"}
+
+data: {"delta": "Pebble, ash."}
+
+data: [DONE]
+

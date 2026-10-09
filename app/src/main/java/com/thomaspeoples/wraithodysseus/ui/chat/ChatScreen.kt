@@ -19,6 +19,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -28,6 +29,8 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.thomaspeoples.wraithodysseus.chat.ChatApi
+import com.thomaspeoples.wraithodysseus.chat.HistoryMessage
+import com.thomaspeoples.wraithodysseus.ui.common.LocalSnackbar
 import com.thomaspeoples.wraithodysseus.ui.theme.Muted
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -36,9 +39,18 @@ import kotlinx.coroutines.withContext
  * reaches everything else. [canUseBash] is privileges.can_use_bash from
  * /api/auth/status: the Terminal chip only exists for those who have it. */
 @Composable
-fun ChatScreen(api: ChatApi, sessionId: String, canUseBash: Boolean, onMenu: () -> Unit) {
+fun ChatScreen(
+    api: ChatApi,
+    sessionId: String,
+    canUseBash: Boolean,
+    onMenu: () -> Unit,
+    /** Opens another chat by id: where Fork lands once the copy exists. */
+    onOpenChat: (String) -> Unit = {},
+) {
     val vm = viewModel(key = sessionId) { ChatViewModel(api, sessionId, createSavedStateHandle()) }
     val context = LocalContext.current
+    val snackbar = LocalSnackbar.current
+    LaunchedEffect(vm) { vm.notices.collect { snackbar.showSnackbar(it) } }
 
     // Covers screen-off and app switches: a run that dropped (or was started
     // elsewhere) is picked up again, replayed from its start.
@@ -57,6 +69,8 @@ fun ChatScreen(api: ChatApi, sessionId: String, canUseBash: Boolean, onMenu: () 
         ChatHeader(vm, onMenu)
 
         val bottomFirst = remember(vm.messages) { vm.messages.asReversed() }
+        // Rewrite is offered on the last reply only: the server rewrites its last assistant row.
+        val lastReplyId = remember(vm.messages) { vm.messages.lastOrNull { it.role == "assistant" }?.dbId }
         LazyColumn(
             Modifier.weight(1f).fillMaxWidth(),
             reverseLayout = true,
@@ -69,7 +83,10 @@ fun ChatScreen(api: ChatApi, sessionId: String, canUseBash: Boolean, onMenu: () 
             vm.live?.let { turn -> item(key = "live") { LiveBubble(turn) } }
             itemsIndexed(bottomFirst, key = { i, m -> m.dbId ?: "local-${bottomFirst.size - i}" }) { _, m ->
                 Box(Modifier.animateItem(fadeInSpec = tween(300), placementSpec = tween(300))) {
-                    MessageItem(m, vm::thumbnail)
+                    val streaming = vm.rewriting?.takeIf { m.dbId != null && m.dbId == lastReplyId }
+                    // The rewrite shows in place of the reply as it streams in.
+                    val shown = if (streaming == null) m else m.copy(content = streaming.ifEmpty { "…" }, raw = streaming, thinking = null)
+                    MessageItem(shown, vm::thumbnail, menu = messageMenu(vm, m, lastReplyId, onOpenChat))
                 }
             }
             if (vm.hasOlder) item { TextButton(onClick = { vm.loadOlder() }) { Text("Load older") } }
@@ -96,6 +113,26 @@ fun ChatScreen(api: ChatApi, sessionId: String, canUseBash: Boolean, onMenu: () 
         )
     }
 }
+
+private fun messageMenu(vm: ChatViewModel, m: HistoryMessage, lastReplyId: String?, onOpenChat: (String) -> Unit) = MessageMenu(
+    canChange = m.dbId != null && !vm.running,
+    lastReply = m.dbId != null && m.dbId == lastReplyId,
+    editText = { vm.visibleForEdit(m) },
+    deleteText = {
+        val doomed = vm.deletionOf(m)
+        when {
+            doomed.size < 2 -> "This message will be deleted from the chat."
+            m.role == "user" -> "This message and the reply after it will be deleted from the chat."
+            else -> "This reply and the message it answers will be deleted from the chat."
+        }
+    },
+    onEdit = { vm.edit(m, it) },
+    onResend = { vm.resend(m) },
+    onRegenerate = { vm.regenerate(m) },
+    onRewrite = { vm.rewrite(m, it) },
+    onFork = { vm.fork(m, onOpenChat) },
+    onDelete = { vm.delete(m) },
+)
 
 /** Name, type and bytes of a picked file. Read whole: the server caps
  * upload size anyway and answers with a readable error past it. */
