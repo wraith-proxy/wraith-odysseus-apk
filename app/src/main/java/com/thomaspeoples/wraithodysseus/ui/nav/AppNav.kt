@@ -1,5 +1,8 @@
 package com.thomaspeoples.wraithodysseus.ui.nav
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
@@ -17,18 +20,21 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -39,11 +45,13 @@ import com.thomaspeoples.wraithodysseus.auth.AuthRepo
 import com.thomaspeoples.wraithodysseus.auth.AuthStatus
 import com.thomaspeoples.wraithodysseus.chat.ChatApi
 import com.thomaspeoples.wraithodysseus.chat.ChatSession
+import com.thomaspeoples.wraithodysseus.chat.SessionsApi
 import com.thomaspeoples.wraithodysseus.chat.newChat
 import com.thomaspeoples.wraithodysseus.email.EmailApi
 import com.thomaspeoples.wraithodysseus.net.ApiException
 import com.thomaspeoples.wraithodysseus.ui.about.AboutScreen
 import com.thomaspeoples.wraithodysseus.ui.chat.ChatScreen
+import com.thomaspeoples.wraithodysseus.ui.chat.ChatViewModel
 import com.thomaspeoples.wraithodysseus.ui.chat.HomeScreen
 import com.thomaspeoples.wraithodysseus.ui.chat.SearchScreen
 import com.thomaspeoples.wraithodysseus.ui.common.LocalSnackbar
@@ -57,6 +65,7 @@ import com.thomaspeoples.wraithodysseus.ui.email.emailReadRoute
 import com.thomaspeoples.wraithodysseus.ui.faq.FaqScreen
 import com.thomaspeoples.wraithodysseus.ui.icons.Lucide
 import com.thomaspeoples.wraithodysseus.ui.login.LoginScreen
+import com.thomaspeoples.wraithodysseus.ui.sessions.ChatListController
 import com.thomaspeoples.wraithodysseus.ui.settings.SettingsScreen
 import com.thomaspeoples.wraithodysseus.ui.tools.Tool
 import com.thomaspeoples.wraithodysseus.ui.tools.ToolEnv
@@ -166,11 +175,7 @@ fun AppNav() {
         }
     }
 
-    // As soon as it starts to open, not once the animation has settled.
-    val opening = drawer.targetValue == DrawerValue.Open
-    LaunchedEffect(opening) {
-        if (!opening) return@LaunchedEffect
-        launch { status = loadStatus(app) }
+    suspend fun refreshSessions() {
         try {
             sessions = chatApi.sessions()
             drawerError = null
@@ -181,6 +186,51 @@ fun AppNav() {
         } catch (e: JSONException) {
             drawerError = userMessage(e)
         }
+    }
+
+    // As soon as it starts to open, not once the animation has settled.
+    val opening = drawer.targetValue == DrawerValue.Open
+    LaunchedEffect(opening) {
+        if (!opening) return@LaunchedEffect
+        launch { status = loadStatus(app) }
+        refreshSessions()
+    }
+
+    // Chats this app has a reply running in: only the open one can, since
+    // leaving a chat ends its follower.
+    var runningIds by remember { mutableStateOf(emptySet<String>()) }
+
+    /** A chat that is gone or archived is not left on screen: back to Home,
+     * which opens the latest one that is left. */
+    fun leaveChat(sid: String, say: String? = null) {
+        nav.navigate(Routes.HOME) { popUpTo(nav.graph.id) { inclusive = true } }
+        say?.let { scope.launch { snackbar.showSnackbar(it) } }
+        runningIds = runningIds - sid
+    }
+    val removed by rememberUpdatedState<(Set<String>) -> Unit> { gone ->
+        val open = currentChatId
+        if (open != null && open in gone) scope.launch {
+            drawer.close()
+            leaveChat(open)
+        }
+    }
+    val chatList = remember {
+        ChatListController(
+            api = SessionsApi(app.http, chatApi),
+            prefs = app.getSharedPreferences("sessions", Context.MODE_PRIVATE),
+            scope = scope,
+            say = { snackbar.showSnackbar(it) },
+            reload = { refreshSessions() },
+            copy = {
+                try {
+                    context.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText("Chat", it))
+                    true
+                } catch (e: RuntimeException) {
+                    false
+                }
+            },
+            onRemoved = { removed(it) },
+        )
     }
 
     fun openDrawer() {
@@ -237,6 +287,8 @@ fun AppNav() {
                     sessions = sessions,
                     error = drawerError,
                     currentChatId = currentChatId,
+                    chatList = chatList,
+                    running = runningIds,
                     status = status,
                     username = app.session.username,
                     onNewChat = { fromDrawer(::newChat) },
@@ -287,6 +339,15 @@ fun AppNav() {
                             onMenu = ::openDrawer,
                             onOpenChat = { nav.openChat(it) },
                         )
+                        // ChatScreen made its view model; this reads two things off it
+                        // (the header menu and slash commands are not this file's).
+                        val sid = chat.arguments?.getString("sid").orEmpty()
+                        val vm = viewModel<ChatViewModel>(key = sid) { error("ChatScreen makes it") }
+                        DisposableEffect(sid, vm.running) {
+                            if (vm.running) runningIds = runningIds + sid
+                            onDispose { runningIds = runningIds - sid }
+                        }
+                        LaunchedEffect(vm.closed) { vm.closed?.let { leaveChat(sid, it) } }
                     }
                     composable(Routes.SEARCH) {
                         SearchScreen(

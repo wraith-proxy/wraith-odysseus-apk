@@ -17,9 +17,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -34,11 +36,18 @@ import com.thomaspeoples.wraithodysseus.R
 import com.thomaspeoples.wraithodysseus.auth.AuthStatus
 import com.thomaspeoples.wraithodysseus.chat.ChatSession
 import com.thomaspeoples.wraithodysseus.ui.icons.Lucide
+import com.thomaspeoples.wraithodysseus.ui.common.LocalSnackbar
+import com.thomaspeoples.wraithodysseus.ui.sessions.ChatItem
+import com.thomaspeoples.wraithodysseus.ui.sessions.ChatListController
+import com.thomaspeoples.wraithodysseus.ui.sessions.ChatListDialogs
+import com.thomaspeoples.wraithodysseus.ui.sessions.SelectBar
+import com.thomaspeoples.wraithodysseus.ui.sessions.buildChatList
 import com.thomaspeoples.wraithodysseus.ui.sessions.chatListItems
 import com.thomaspeoples.wraithodysseus.ui.settings.Avatar
 import com.thomaspeoples.wraithodysseus.ui.theme.Muted
 import com.thomaspeoples.wraithodysseus.ui.theme.OdyColors
 import com.thomaspeoples.wraithodysseus.ui.tools.Tool
+import java.time.Instant
 
 /**
  * The web UI's sidebar: New Chat, Search, the chats, Email, the Tools and,
@@ -50,6 +59,8 @@ fun AppDrawer(
     sessions: List<ChatSession>?,
     error: String?,
     currentChatId: String?,
+    chatList: ChatListController,
+    running: Set<String>,
     status: AuthStatus?,
     username: String?,
     onNewChat: () -> Unit,
@@ -61,7 +72,10 @@ fun AppDrawer(
     onSettings: () -> Unit,
 ) {
     var toolsOpen by rememberSaveable { mutableStateOf(true) }
-    var showAllChats by rememberSaveable { mutableStateOf(false) }
+    val now = remember(sessions) { Instant.now() }
+    val items = remember(sessions, chatList.sort, chatList.collapsed, chatList.expanded) {
+        buildChatList(sessions.orEmpty(), chatList.sort, now, chatList.collapsed, chatList.expanded)
+    }
     // The drawer comes in from the right, so its inner edge is the start.
     ModalDrawerSheet(
         drawerContainerColor = MaterialTheme.colorScheme.surface,
@@ -78,9 +92,13 @@ fun AppDrawer(
             }
             item(key = "new") { DrawerRow(Lucide.Plus, "New Chat", onNewChat) }
             item(key = "search") { DrawerRow(Lucide.Search, "Search", onSearch) }
-            item(key = "chats") { DrawerRow(Lucide.MessageSquare, stringResource(R.string.nav_chats), onClick = null) }
+            item(key = "chats") {
+                DrawerRow(Lucide.MessageSquare, stringResource(R.string.nav_chats), onClick = null) {
+                    IconButton(onClick = { chatList.sortMenu = true }) { Icon(Lucide.ListFilter, "Sort and select", tint = Muted, modifier = Modifier.size(18.dp)) }
+                }
+            }
             when {
-                sessions != null -> chatListItems(sessions, currentChatId, showAllChats, { showAllChats = true }, onOpenChat)
+                sessions != null -> chatListItems(items, chatList, currentChatId, running, onOpenChat)
                 error != null -> item(key = "chats-error") {
                     Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
                 }
@@ -113,6 +131,12 @@ fun AppDrawer(
                 }
             }
         }
+        // The app's snackbar sits under the drawer's scrim; this one is seen.
+        SnackbarHost(LocalSnackbar.current)
+        if (chatList.selecting) {
+            SelectBar(chatList, items.filterIsInstance<ChatItem>().map { it.session.id }, sessions.orEmpty())
+        }
+        ChatListDialogs(chatList, sessions.orEmpty())
         HorizontalDivider(color = OdyColors.BubbleBorder.copy(alpha = 0.4f))
         Row(
             Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onSettings).padding(horizontal = 16.dp, vertical = 12.dp),
