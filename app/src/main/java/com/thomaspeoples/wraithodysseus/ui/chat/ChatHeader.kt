@@ -110,10 +110,10 @@ internal fun ChatHeader(
             title = vm.title,
             onDismiss = { actions = false },
             actions = listOf(
-                SheetAction("Rename", Lucide.Pencil) { vm.renaming = true },
+                SheetAction("Rename", Lucide.Pencil) { vm.askRename() },
                 SheetAction("Compact", Lucide.Shrink) { vm.compact() },
                 SheetAction("Copy Chat", Lucide.Copy) { onCopy() },
-                SheetAction("Delete Chat", Lucide.Trash2, destructive = true) { vm.confirmDelete = true },
+                SheetAction("Delete Chat", Lucide.Trash2, destructive = true) { vm.askDelete() },
             ),
         )
     }

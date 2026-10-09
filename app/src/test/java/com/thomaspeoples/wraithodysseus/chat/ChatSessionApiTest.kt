@@ -306,6 +306,15 @@ class ChatSessionApiTest {
     }
 
     @Test
+    fun aCustomPresetWithoutAnEnabledKeyIsOfferedOnlyWhenItHoldsSomething() {
+        val ids = { json: String -> parsePresets(JSONObject(json)).map { it.id } }
+        assertEquals(listOf("custom"), ids("""{"custom": {"name": "Mine", "system_prompt": "p"}}"""))
+        assertEquals(listOf("custom"), ids("""{"custom": {"name": "Custom", "temperature": 0.5}}"""))
+        assertEquals(emptyList<String>(), ids("""{"custom": {"name": "Custom", "temperature": 1.0}}"""))
+        assertEquals(emptyList<String>(), ids("""{"custom": {"name": "Mine", "system_prompt": "p", "enabled": false}}"""))
+    }
+
+    @Test
     fun skillCatalogParsesNamesAndHelp() = runBlocking {
         server.enqueue(json("slash_catalog.json"))
         val skills = api.skillCommands()

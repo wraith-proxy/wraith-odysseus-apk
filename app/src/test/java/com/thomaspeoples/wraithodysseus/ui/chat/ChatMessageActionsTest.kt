@@ -333,6 +333,9 @@ class ChatMessageActionsTest {
         assertEquals("A2", b.getString("original_text"))
         assertEquals("shorter", b.getString("instruction"))
         assertEquals("Grey things: pebble, ash.", vm.msg("m-4").content)
+        // A rewrite of an edited reply must clear `edited`, or reload hides its variants.
+        val saved = JSONObject(bodies.getValue("/api/session/s1/update-last-meta")).getJSONObject("metadata")
+        assertFalse(saved.getBoolean("edited"))
         assertNull(vm.rewriting)
         assertFalse(vm.running)
     }

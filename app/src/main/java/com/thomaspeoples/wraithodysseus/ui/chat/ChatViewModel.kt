@@ -445,7 +445,9 @@ class ChatViewModel(
                     running = false
                     val again = SlashCommands.parse(text, skills.orEmpty().map { it.name })
                     if (again != null) runSlash(again, text) else dispatch(text, files)
-                    drainQueue(failed = false)
+                    // A run or action that just started drains when it ends; a
+                    // second stream must not start beside it.
+                    if (!running) drainQueue(failed = false)
                 }
                 return
             }
@@ -493,9 +495,9 @@ class ChatViewModel(
     private fun runSlash(cmd: Slash, raw: String) {
         when (cmd) {
             Slash.New -> newChat()
-            is Slash.Rename -> if (cmd.name.isBlank()) renaming = true else rename(cmd.name)
+            is Slash.Rename -> if (cmd.name.isBlank()) askRename() else rename(cmd.name)
             Slash.Fork -> forkChat()
-            Slash.Delete -> confirmDelete = true
+            Slash.Delete -> askDelete()
             Slash.Archive -> archive()
             Slash.Compact -> compact()
             is Slash.Model -> modelCommand(cmd.query)
@@ -545,6 +547,16 @@ class ChatViewModel(
         val forked = api.fork(sessionId, Int.MAX_VALUE)
         say("Forked: ${forked.name}")
         openChat(forked.id)
+    }
+
+    /** Opens the rename dialog, unless a run would make the rename refuse after the user typed it. */
+    fun askRename() {
+        if (running) say(WAIT_FOR_REPLY) else renaming = true
+    }
+
+    /** Opens the delete confirmation, unless a run would make the delete refuse after the user confirmed. */
+    fun askDelete() {
+        if (running) say(WAIT_FOR_REPLY) else confirmDelete = true
     }
 
     fun rename(name: String) {
@@ -926,7 +938,10 @@ class ChatViewModel(
                 // The web keeps the old text beside the rewrite (chat.js:7918).
                 val all = keptVariants(m.details.variants, m.raw) + Variant(text, if (instruction == SHORTER) "shorter" else if (instruction == SIMPLER) "simpler" else "regen")
                 try {
-                    api.updateLastMeta(sessionId, variantsMeta(all, all.lastIndex))
+                    // The server's edit-message never clears `edited`, and an
+                    // edited reply's variants are hidden on reload; the rewrite
+                    // replaces the edited text, so the flag goes too.
+                    api.updateLastMeta(sessionId, variantsMeta(all, all.lastIndex).put("edited", false))
                 } catch (e: ApiException) {
                     notice(e)
                 } catch (e: IOException) {
@@ -1003,7 +1018,10 @@ class ChatViewModel(
 
     /** One non-streaming action at a time, the composer locked meanwhile. */
     private fun act(block: suspend () -> Unit) {
-        if (running) return
+        if (running) {
+            say(WAIT_FOR_REPLY)
+            return
+        }
         running = true
         viewModelScope.launch {
             try {
@@ -1183,6 +1201,7 @@ class ChatViewModel(
     }
 
     internal companion object {
+        const val WAIT_FOR_REPLY = "Wait for the reply to finish"
         const val UNEXPECTED = "Unexpected response from the server"
         const val EXPIRED = "Approval expired"
         /** What the web sends to continue (chatRenderer.js:3705); the server recognises it

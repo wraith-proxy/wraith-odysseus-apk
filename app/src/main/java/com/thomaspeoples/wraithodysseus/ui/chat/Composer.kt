@@ -273,6 +273,8 @@ fun Composer(
 /**
  * A sideways swipe anywhere on the input row, watched on the way down so the
  * text field keeps its own gestures. Far enough and mostly horizontal.
+ * Known limit: a long drag that extends a text selection also counts, as the
+ * field does not tell this modifier about its selection.
  */
 private fun Modifier.planSwipe(enabled: Boolean, onSwipe: () -> Unit): Modifier = pointerInput(enabled) {
     if (!enabled) return@pointerInput

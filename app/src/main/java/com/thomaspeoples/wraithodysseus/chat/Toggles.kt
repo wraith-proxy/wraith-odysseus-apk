@@ -28,14 +28,15 @@ data class Toggles(
     val planMode get() = plan && !research
 
     fun toggleAgent() =
-        if (agent) copy(agent = false, terminal = false, plan = false) else copy(agent = true, research = false)
+        if (agentMode) copy(agent = false, terminal = false, plan = false) else copy(agent = true, research = false)
     fun toggleWeb() = if (web) copy(web = false) else copy(web = true, research = false)
     fun toggleTerminal() =
         if (terminal) copy(terminal = false) else copy(terminal = true, agent = true, research = false)
     fun toggleResearch() =
         if (research) copy(research = false) else Toggles(research = true, rag = rag, preset = preset)
+    /** Plan forces agent through [agentMode] without writing `agent`, so turning plan off returns to the mode the chat had. */
     fun togglePlan() =
-        if (plan) copy(plan = false) else copy(plan = true, agent = true, research = false)
+        if (plan) copy(plan = false) else copy(plan = true, research = false)
     fun toggleRag() = copy(rag = !rag)
     fun withPreset(id: String?) = copy(preset = id)
 

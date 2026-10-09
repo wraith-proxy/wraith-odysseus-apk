@@ -77,9 +77,24 @@ internal fun parseGeneration(o: JSONObject) = GenerationSettings(
  */
 internal fun parsePresets(root: JSONObject): List<Preset> = root.keys().asSequence().mapNotNull { id ->
     val o = root.optJSONObject(id) ?: return@mapNotNull null
-    if (id == "custom" && !o.optBoolean("enabled", false)) return@mapNotNull null
+    if (id == "custom" && !customOffered(o)) return@mapNotNull null
     Preset(id, o.str("name")?.ifBlank { null } ?: id)
 }.toList()
+
+/**
+ * presets.js:525-545: the custom preset is off when `enabled` is false. With
+ * no `enabled` key the web treats it as on if it holds anything (and off for
+ * the untouched legacy default), so the phone does the same.
+ */
+internal fun customOffered(o: JSONObject): Boolean {
+    if (o.has("enabled")) return o.optBoolean("enabled", false)
+    val legacyPrompt = "You are a helpful, balanced assistant. Match your response style to the user's needs."
+    if (o.str("name") == "Custom" && o.str("character_name").isNullOrEmpty() && o.str("system_prompt") == legacyPrompt) return false
+    return !o.str("character_name").isNullOrEmpty() || !o.str("system_prompt").isNullOrEmpty() ||
+        !o.str("inject_prefix").isNullOrEmpty() || !o.str("inject_suffix").isNullOrEmpty() ||
+        !o.str("thinking_mode").isNullOrEmpty() || (o.doubleOrNull("temperature") ?: 1.0) != 1.0 ||
+        (o.intOrNull("max_tokens") ?: 0) != 0
+}
 
 internal fun parseSkills(root: JSONObject): List<SkillCommand> {
     val arr = root.optJSONArray("skills") ?: return emptyList()

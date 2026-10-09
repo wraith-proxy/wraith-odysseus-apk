@@ -32,8 +32,14 @@ class MediaPlayerOutput(private val cacheDir: File) : SpeechOutput {
         stop()
         val mine = generation
         val ext = if (speech.mime.contains("mpeg") || speech.mime.contains("mp3")) "mp3" else "wav"
-        val f = withContext(Dispatchers.IO) {
-            File(cacheDir, "speech-${System.nanoTime()}.$ext").also { it.writeBytes(speech.bytes) }
+        // Made before the write, so a cancel that lands while withContext is
+        // returning can still delete it.
+        val f = File(cacheDir, "speech-${System.nanoTime()}.$ext")
+        try {
+            withContext(Dispatchers.IO) { f.writeBytes(speech.bytes) }
+        } catch (e: Throwable) {
+            f.delete()
+            throw e
         }
         if (mine != generation) {
             f.delete()
