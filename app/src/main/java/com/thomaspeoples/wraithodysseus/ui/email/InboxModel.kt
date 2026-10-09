@@ -283,7 +283,7 @@ class InboxViewModel(private val api: EmailApi) : ViewModel() {
         state = state.copy(emails = state.emails.apply(), found = state.found?.apply())
     }
 
-    private fun drop(keys: Set<String>) {
+    fun drop(keys: Set<String>) {
         val gone = state.emails.count { it.key in keys }
         state = state.copy(
             emails = state.emails.filterNot { it.key in keys },

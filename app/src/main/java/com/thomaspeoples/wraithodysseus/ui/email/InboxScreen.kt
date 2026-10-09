@@ -102,6 +102,10 @@ fun InboxScreen(api: EmailApi, onOpen: (EmailSummary) -> Unit, onCompose: () -> 
     val owner = LocalLifecycleOwner.current
     LaunchedEffect(owner, vm) {
         owner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            synchronized(ReadHandoff.removed) {
+                if (ReadHandoff.removed.isNotEmpty()) vm.drop(ReadHandoff.removed.toSet())
+                ReadHandoff.removed.clear()
+            }
             while (true) {
                 vm.poll()
                 delay(POLL_MS)
@@ -227,6 +231,7 @@ fun InboxScreen(api: EmailApi, onOpen: (EmailSummary) -> Unit, onCompose: () -> 
                                             if (state.selecting) vm.toggleSelected(email)
                                             else {
                                                 vm.opened(email)
+                                                ReadHandoff.siblings = groups.flatMap { it.emails }
                                                 onOpen(email)
                                             }
                                         },
@@ -255,7 +260,7 @@ fun InboxScreen(api: EmailApi, onOpen: (EmailSummary) -> Unit, onCompose: () -> 
 
     sheet?.let { email ->
         val actions = buildList {
-            add(SheetAction("Open", Lucide.MailOpen) { vm.opened(email); onOpen(email) })
+            add(SheetAction("Open", Lucide.MailOpen) { vm.opened(email); ReadHandoff.siblings = groups.flatMap { it.emails }; onOpen(email) })
             add(SheetAction("Remind to reply", Lucide.AlarmClock) { remind = email })
             if (!sent) add(SheetAction(if (email.isAnswered) "Not done" else "Done", Lucide.Check) { vm.toggleDone(email) })
             add(SheetAction(if (email.isFlagged) "Unfavorite" else "Favorite", Lucide.Bookmark) { vm.toggleFavorite(email) })

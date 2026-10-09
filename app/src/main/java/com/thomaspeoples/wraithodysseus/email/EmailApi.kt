@@ -3,11 +3,15 @@ package com.thomaspeoples.wraithodysseus.email
 import com.thomaspeoples.wraithodysseus.net.ApiException
 import com.thomaspeoples.wraithodysseus.net.Http
 import com.thomaspeoples.wraithodysseus.net.sseFrames
+import java.io.File
 import java.io.IOException
 import java.net.ConnectException
 import java.net.UnknownHostException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
@@ -68,7 +72,9 @@ data class ScheduledEmail(
 /** POST /api/email/delete-bulk: which uids moved and which did not. */
 data class BulkDelete(val deleted: List<String>, val failed: List<String>)
 
-/** GET /api/email/read/{uid}. [body] is always plain text. */
+/** GET /api/email/read/{uid}. [body] is always plain text; [bodyHtml] is the
+ * server's raw HTML part (empty when there is none, as with scheduled mail)
+ * and is NOT sanitised, so it must only ever reach the sandboxed reader. */
 data class EmailMessage(
     val uid: String,
     val folder: String,
@@ -82,6 +88,12 @@ data class EmailMessage(
     val references: String,
     val body: String,
     val markSeenFailed: Boolean,
+    val bodyHtml: String = "",
+    val attachments: List<EmailAttachment> = emptyList(),
+    /** Attachments of earlier messages in the thread ("From earlier in this thread"). */
+    val relatedAttachments: List<EmailAttachment> = emptyList(),
+    /** True when the server left the attachment list out of the read; it is then fetched separately. */
+    val attachmentsDeferred: Boolean = false,
 )
 
 /** POST /api/email/send, always with wait_for_delivery:true. The reply fields
@@ -96,7 +108,27 @@ data class SendRequest(
     val references: String? = null,
     val sourceUid: String? = null,
     val sourceFolder: String? = null,
+    /** Compose-upload tokens (see [EmailApi.stageAttachment]) to attach. */
+    val attachments: List<String> = emptyList(),
 )
+
+/** The outcome of POST /translate. */
+sealed interface TranslateResult {
+    data class Done(val text: String, val language: String) : TranslateResult
+    /** The mail was already in the target language. */
+    data object SameLanguage : TranslateResult
+    /** A 504: the gateway gave up, the model may still be working. */
+    data object StillWorking : TranslateResult
+}
+
+/** POST /api/contacts/add: saved now, or the address was already there. */
+enum class ContactResult { Saved, AlreadySaved }
+
+/** POST /api/calendar/import. */
+data class CalendarImport(val imported: Int, val skipped: Int, val calendar: String)
+
+/** A fetched inline image: [mime] is the server's Content-Type. */
+class InlineImage(val mime: String, val bytes: ByteArray)
 
 sealed interface SendResult {
     data object Sent : SendResult
@@ -284,7 +316,127 @@ class EmailApi(private val http: Http, private val sendTimeoutSeconds: Long = Ht
             references = o.optString("references"),
             body = o.optString("body"),
             markSeenFailed = o.optBoolean("mark_seen_failed"),
+            bodyHtml = if (o.isNull("body_html")) "" else o.optString("body_html"),
+            attachments = parseAttachments(o.optJSONArray("attachments")),
+            relatedAttachments = parseAttachments(o.optJSONArray("related_attachments")),
+            attachmentsDeferred = o.optBoolean("attachments_deferred"),
         )
+    }
+
+    /** GET /attachments/{uid}: used when the read left the list out
+     * ([EmailMessage.attachmentsDeferred]). Failure arrives as a 200 with `error`. */
+    suspend fun attachments(accountId: String?, folder: String, uid: String): List<EmailAttachment> {
+        val url = emailUrl(accountId, "attachments", uid).addQueryParameter("folder", folder).build()
+        return parseAttachments(checkBody(http.call(get(url))).optJSONArray("attachments"))
+    }
+
+    /**
+     * GET /attachment/{uid}/{index} streamed into [dest]. The server answers
+     * a failure ("Email not found", "Mail operation failed") with HTTP 200 and
+     * a JSON body, so the Content-Type is checked before anything is saved;
+     * a real attachment always comes back as application/octet-stream.
+     */
+    suspend fun saveAttachment(accountId: String?, folder: String, uid: String, index: Int, dest: File) {
+        val url = emailUrl(accountId, "attachment", uid, index.toString()).addQueryParameter("folder", folder).build()
+        http.open(get(url), DOWNLOAD_TIMEOUT_S).use { response ->
+            val type = response.header("Content-Type")
+            if (isJsonType(type)) throw ApiException(200, attachmentError(response.body?.string().orEmpty()))
+            withContext(Dispatchers.IO) {
+                dest.parentFile?.mkdirs()
+                val input = response.body?.byteStream() ?: throw ApiException(200, "Unexpected response")
+                try {
+                    input.use { src -> dest.outputStream().use { src.copyTo(it) } }
+                } catch (e: IOException) {
+                    dest.delete()
+                    throw e
+                }
+            }
+        }
+    }
+
+    /** GET /inline-image/{uid}?cid=: null when the server has no such image
+     * (a 404, or a JSON error in a 200). Shown in the reader's WebView, which
+     * never gets the session cookie itself. */
+    suspend fun inlineImage(accountId: String?, folder: String, uid: String, cid: String): InlineImage? {
+        val response = try {
+            http.open(get(inlineImageUrl(accountId, folder, uid, cid)), DOWNLOAD_TIMEOUT_S)
+        } catch (_: ApiException) {
+            return null
+        }
+        return response.use {
+            val type = it.header("Content-Type").orEmpty().substringBefore(';').trim().lowercase()
+            if (!type.startsWith("image/")) null
+            else withContext(Dispatchers.IO) { InlineImage(type, it.body?.bytes() ?: ByteArray(0)) }
+        }
+    }
+
+    /** The inline-image URL the web builds: cid, folder and account_id as query. */
+    fun inlineImageUrl(accountId: String?, folder: String, uid: String, cid: String): HttpUrl =
+        emailUrl(accountId, "inline-image", uid).addQueryParameter("cid", cid).addQueryParameter("folder", folder).build()
+
+    /** POST /move/{uid}?dest=: Move to Spam is dest=Junk, as the web sends it. */
+    suspend fun move(accountId: String?, folder: String, uid: String, dest: String) =
+        mutate("move", accountId, folder, uid) { addQueryParameter("dest", dest) }
+
+    /** DELETE /delete-permanent/{uid}: expunges, with no Trash. Only an
+     * explicit `success:true` counts, as for [delete]. */
+    suspend fun deletePermanent(accountId: String?, folder: String, uid: String) {
+        val url = emailUrl(accountId, "delete-permanent", uid).addQueryParameter("folder", folder).build()
+        val json = checkBody(http.call(Request.Builder().url(url).delete().build()))
+        if (json.opt("success") != true) throw ApiException(200, "Request failed")
+    }
+
+    /**
+     * POST /translate. The model runs for up to 180s inside the request, so a
+     * gateway in front of the server may cut in with a 504 while the work
+     * carries on (and caches its result): that is [TranslateResult.StillWorking],
+     * and asking again then returns the cached text. Not retried by OkHttp.
+     */
+    suspend fun translate(body: String, subject: String, from: String, language: String): TranslateResult {
+        val payload = JSONObject().put("body", body).put("subject", subject).put("from", from)
+            .put("target_language", language).put("auto", false)
+        val request = Request.Builder().url(http.url("/api/email/translate")).post(payload.toString().toRequestBody(JSON)).build()
+        val text = try {
+            http.call(request, TRANSLATE_TIMEOUT_S, retry = false)
+        } catch (e: ApiException) {
+            if (e.status == 504) return TranslateResult.StillWorking
+            throw e
+        }
+        val json = checkBody(text)
+        if (json.opt("success") != true) throw ApiException(200, "Request failed")
+        if (json.optBoolean("same_language")) return TranslateResult.SameLanguage
+        val translated = cleanTranslation(json.optString("translation"))
+        if (translated.isEmpty()) throw ApiException(200, "Empty response from model")
+        return TranslateResult.Done(translated, json.optString("language", language))
+    }
+
+    /** POST /api/contacts/add {name, email}. The web falls back to the
+     * address's local part for a missing name; the server does the same. */
+    suspend fun addContact(name: String, email: String): ContactResult {
+        val body = JSONObject().put("name", name).put("email", email).toString().toRequestBody(JSON)
+        val json = checkBody(http.call(Request.Builder().url(http.url("/api/contacts/add")).post(body).build()))
+        if (json.opt("success") != true) throw ApiException(200, "Failed to save contact")
+        return if (json.optString("message") == "Already exists") ContactResult.AlreadySaved else ContactResult.Saved
+    }
+
+    /** POST /api/calendar/import: the .ics as multipart field `file`, as the web sends it. */
+    suspend fun importCalendar(name: String, bytes: ByteArray): CalendarImport {
+        val form = MultipartBody.Builder().setType(MultipartBody.FORM)
+            .addFormDataPart("file", name, bytes.toRequestBody("application/octet-stream".toMediaType()))
+            .build()
+        val json = checkBody(http.call(Request.Builder().url(http.url("/api/calendar/import")).post(form).build()))
+        if (json.opt("ok") != true) throw ApiException(200, "Import failed")
+        return CalendarImport(json.optInt("imported"), json.optInt("skipped"), json.optString("calendar"))
+    }
+
+    /** POST /compose-from-attachment/{uid}/{index}: copies a received attachment
+     * into the compose uploads and returns the token /send takes, which is how
+     * Forward sends the originals as real attachments. */
+    suspend fun stageAttachment(accountId: String?, folder: String, uid: String, index: Int): String {
+        val url = emailUrl(accountId, "compose-from-attachment", uid, index.toString()).addQueryParameter("folder", folder).build()
+        val json = checkBody(http.call(Request.Builder().url(url).post(ByteArray(0).toRequestBody()).build()))
+        return json.optString("token").takeIf { it.isNotBlank() && json.opt("success") == true }
+            ?: throw ApiException(200, "Could not attach the file")
     }
 
     suspend fun markUnread(accountId: String?, folder: String, uid: String) = mutate("mark-unread", accountId, folder, uid)
@@ -391,6 +543,9 @@ class EmailApi(private val http: Http, private val sendTimeoutSeconds: Long = Ht
         /** Same page size as the web UI, and small enough to stay well
          * inside the server's 45s request timeout. */
         const val PAGE_SIZE = 50
+        const val DOWNLOAD_TIMEOUT_S = 60L
+        /** Just above the server's own 180s cut on the model call. */
+        const val TRANSLATE_TIMEOUT_S = 190L
         const val MIN_SEARCH = 2
         const val SEARCH_LIMIT = 100
         private val JSON = "application/json".toMediaType()
@@ -436,6 +591,7 @@ class EmailApi(private val http: Http, private val sendTimeoutSeconds: Long = Ht
             r.references?.let { put("references", it) }
             r.sourceUid?.let { put("source_uid", it) }
             r.sourceFolder?.let { put("source_folder", it) }
+            if (r.attachments.isNotEmpty()) put("attachments", JSONArray(r.attachments))
             put("wait_for_delivery", true)
         }
     }
