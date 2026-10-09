@@ -133,6 +133,7 @@ fun ReadScreen(api: EmailApi, accountId: String?, folder: String, uid: String, o
     }
     var attachments by remember(key) { mutableStateOf<List<EmailAttachment>>(emptyList()) }
     var attLoading by remember(key) { mutableStateOf(false) }
+    var attFailed by remember(key) { mutableStateOf(false) }
     var openingKey by remember(key) { mutableStateOf<String?>(null) }
     var translation by remember(key) { mutableStateOf<TranslationState>(TranslationState.Idle) }
     var allowImages by remember(key) { mutableStateOf(false) }
@@ -159,6 +160,22 @@ fun ReadScreen(api: EmailApi, accountId: String?, folder: String, uid: String, o
         scope.launch { snackbar.showSnackbar(text) }
     }
 
+    // The attachment list arrives separately. A failure is shown, with Retry,
+    // and Forward waits: sending without it would silently drop the files.
+    suspend fun loadAttachments() {
+        attLoading = true
+        attFailed = false
+        try {
+            attachments = api.attachments(acct, curFolder, curUid)
+        } catch (_: ApiException) {
+            attFailed = true
+        } catch (_: IOException) {
+            attFailed = true
+        } finally {
+            attLoading = false
+        }
+    }
+
     LaunchedEffect(key) {
         scroll.scrollTo(0)
         try {
@@ -166,14 +183,7 @@ fun ReadScreen(api: EmailApi, accountId: String?, folder: String, uid: String, o
             message = m
             if (!m.markSeenFailed) flags = flags.copy(read = true)
             if (m.attachmentsDeferred) {
-                attLoading = true
-                try {
-                    attachments = api.attachments(acct, curFolder, curUid)
-                } catch (_: ApiException) {
-                } catch (_: IOException) {
-                } finally {
-                    attLoading = false
-                }
+                loadAttachments()
             } else {
                 attachments = m.attachments
             }
@@ -387,7 +397,7 @@ fun ReadScreen(api: EmailApi, accountId: String?, folder: String, uid: String, o
                     )
                     ReadActions(
                         replyAll = hasMultipleRecipients(loaded, mine),
-                        forwardEnabled = !attLoading,
+                        forwardEnabled = !attLoading && !attFailed,
                         onAi = { askHint = true },
                         onReply = { aiStart = false; composeMode = "reply" },
                         onReplyAll = { composeMode = "replyAll" },
@@ -406,6 +416,8 @@ fun ReadScreen(api: EmailApi, accountId: String?, folder: String, uid: String, o
                         attachments = attachments,
                         related = loaded.relatedAttachments,
                         loading = attLoading,
+                        failed = attFailed,
+                        onRetry = { scope.launch { loadAttachments() } },
                         busyKey = openingKey,
                         onOpen = ::openAttachment,
                         onCalendar = ::addToCalendar,

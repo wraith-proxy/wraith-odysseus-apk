@@ -94,6 +94,7 @@ class InboxViewModel(private val api: EmailApi) : ViewModel() {
 
     private var listJob: Job? = null
     private var searchJob: Job? = null
+    private var moreJob: Job? = null
     private var knownMaxUid = mutableMapOf<String, Long>()
 
     init {
@@ -142,6 +143,7 @@ class InboxViewModel(private val api: EmailApi) : ViewModel() {
 
     private fun switchView(change: (InboxState) -> InboxState) {
         searchJob?.cancel()
+        moreJob?.cancel()
         state = change(state).copy(
             emails = emptyList(), total = 0, scheduled = emptyList(), updatedAt = null, loaded = false,
             selecting = false, selected = emptySet(), query = "", found = null, searchBusy = false,
@@ -167,6 +169,8 @@ class InboxViewModel(private val api: EmailApi) : ViewModel() {
      * sends refresh=1, so the server re-asks the mail provider. */
     fun reload(pull: Boolean = false) {
         listJob?.cancel()
+        // A page fetched for the old list must not land on the new one.
+        moreJob?.cancel()
         if (state.query.trim().length >= EmailApi.MIN_SEARCH) {
             search(state.query.trim())
             if (!pull) return
@@ -176,7 +180,7 @@ class InboxViewModel(private val api: EmailApi) : ViewModel() {
             try {
                 val s = state
                 when {
-                    s.allUnread -> loadAllUnread()
+                    s.allUnread -> loadAllUnread(pull)
                     s.folder == SCHEDULED_FOLDER -> state = state.copy(scheduled = api.scheduled(), updatedAt = null)
                     else -> loadFolder(pull)
                 }
@@ -212,13 +216,13 @@ class InboxViewModel(private val api: EmailApi) : ViewModel() {
         state = state.copy(emails = page.emails, total = page.total, updatedAt = page.updatedAt ?: state.updatedAt)
     }
 
-    private suspend fun loadAllUnread() {
+    private suspend fun loadAllUnread(pull: Boolean) {
         val passes = unreadPasses(state.accounts)
         val done = mutableListOf<Pair<EmailAccount?, UnreadPass>>()
         // One account at a time, showing each as it lands: the first
         // screenful should not wait for the slowest mailbox.
         for (account in passes) {
-            done += account to pageUnread { offset -> api.unreadPage(account?.id, offset) }
+            done += account to pageUnread { offset -> api.unreadPage(account?.id, offset, refresh = pull && offset == 0) }
             publish(mergeUnread(done))
         }
     }
@@ -230,7 +234,7 @@ class InboxViewModel(private val api: EmailApi) : ViewModel() {
     fun loadMore() {
         val s = state
         if (s.loadingMore || s.allUnread || s.isScheduled || s.found != null || s.emails.size >= s.total) return
-        viewModelScope.launch {
+        moreJob = viewModelScope.launch {
             state = state.copy(loadingMore = true)
             try {
                 val page = api.listPage(s.accountId, s.folder, s.filter, s.emails.size)

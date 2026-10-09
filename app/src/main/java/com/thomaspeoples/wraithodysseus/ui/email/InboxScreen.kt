@@ -88,11 +88,18 @@ fun InboxScreen(api: EmailApi, onOpen: (EmailSummary) -> Unit, onCompose: () -> 
     val snackbar = LocalSnackbar.current
     val scope = rememberCoroutineScope()
     var searchOpen by rememberSaveable { mutableStateOf(false) }
-    var sheet by remember { mutableStateOf<EmailSummary?>(null) }
-    var remind by remember { mutableStateOf<EmailSummary?>(null) }
-    var deleting by remember { mutableStateOf<EmailSummary?>(null) }
-    var cancelling by remember { mutableStateOf<ScheduledEmail?>(null) }
-    var bulkDelete by remember { mutableStateOf(false) }
+    // Rows are not Parcelable: the dialogs and sheets are held by row key so
+    // they survive rotation, and looked up in the list again.
+    var sheetKey by rememberSaveable { mutableStateOf<String?>(null) }
+    var remindKey by rememberSaveable { mutableStateOf<String?>(null) }
+    var deletingKey by rememberSaveable { mutableStateOf<String?>(null) }
+    var cancellingId by rememberSaveable { mutableStateOf<String?>(null) }
+    var bulkDelete by rememberSaveable { mutableStateOf(false) }
+    fun row(k: String?) = k?.let { key -> state.visible.firstOrNull { it.key == key } }
+    val sheet = row(sheetKey)
+    val remind = row(remindKey)
+    val deleting = row(deletingKey)
+    val cancelling = state.scheduled.firstOrNull { it.id == cancellingId }
     var now by remember { mutableStateOf(Instant.now()) }
 
     LaunchedEffect(vm) { vm.messages.collect { snackbar.showSnackbar(it) } }
@@ -210,12 +217,15 @@ fun InboxScreen(api: EmailApi, onOpen: (EmailSummary) -> Unit, onCompose: () -> 
             val empty = if (state.isScheduled) state.scheduled.isEmpty() else state.visible.isEmpty()
             when {
                 state.noAccounts -> Centered("No enabled email accounts. Add or enable one in the web UI.")
-                state.loaded && state.problem == null && !state.searchBusy && empty -> Centered(emptyText(state))
+                state.loaded && state.problem == null && !state.searchBusy && empty -> PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = { vm.reload(pull = true) }, modifier = Modifier.fillMaxSize()) {
+                    // Scrollable, so a pull still reaches the box when the list is empty.
+                    LazyColumn(Modifier.fillMaxSize()) { item { Box(Modifier.fillParentMaxSize()) { Centered(emptyText(state)) } } }
+                }
                 else -> PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = { vm.reload(pull = true) }, modifier = Modifier.fillMaxSize()) {
                     LazyColumn(Modifier.fillMaxSize()) {
                         if (state.isScheduled) {
                             items(state.scheduled, key = { it.id }) { item ->
-                                ScheduledRow(item, onCancel = { cancelling = item })
+                                ScheduledRow(item, onCancel = { cancellingId = item.id })
                                 HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
                             }
                         } else {
@@ -238,7 +248,7 @@ fun InboxScreen(api: EmailApi, onOpen: (EmailSummary) -> Unit, onCompose: () -> 
                                         onLongClick = { if (state.selecting) vm.toggleSelected(email) else vm.startSelecting(email) },
                                         onFavorite = { vm.toggleFavorite(email) },
                                         onDone = { vm.toggleDone(email) },
-                                        onMore = { sheet = email },
+                                        onMore = { sheetKey = email.key },
                                     )
                                     HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
                                 }
@@ -261,14 +271,14 @@ fun InboxScreen(api: EmailApi, onOpen: (EmailSummary) -> Unit, onCompose: () -> 
     sheet?.let { email ->
         val actions = buildList {
             add(SheetAction("Open", Lucide.MailOpen) { vm.opened(email); ReadHandoff.siblings = groups.flatMap { it.emails }; onOpen(email) })
-            add(SheetAction("Remind to reply", Lucide.AlarmClock) { remind = email })
+            add(SheetAction("Remind to reply", Lucide.AlarmClock) { remindKey = email.key })
             if (!sent) add(SheetAction(if (email.isAnswered) "Not done" else "Done", Lucide.Check) { vm.toggleDone(email) })
             add(SheetAction(if (email.isFlagged) "Unfavorite" else "Favorite", Lucide.Bookmark) { vm.toggleFavorite(email) })
             add(SheetAction("Archive", Lucide.Archive) { vm.archive(email) })
             add(SheetAction("Select", Lucide.ListChecks) { vm.startSelecting(email) })
-            add(SheetAction("Delete", Lucide.Trash2, destructive = true) { deleting = email })
+            add(SheetAction("Delete", Lucide.Trash2, destructive = true) { deletingKey = email.key })
         }
-        ActionSheet(actions, onDismiss = { sheet = null }, title = email.subject.ifBlank { "(no subject)" })
+        ActionSheet(actions, onDismiss = { sheetKey = null }, title = email.subject.ifBlank { "(no subject)" })
     }
 
     remind?.let { email ->
@@ -278,7 +288,7 @@ fun InboxScreen(api: EmailApi, onOpen: (EmailSummary) -> Unit, onCompose: () -> 
         } + SheetAction("Pick date…", Lucide.CalendarPlus) {
             pickDateTime(context, presets[1].due) { vm.remind(email, it) }
         }
-        ActionSheet(actions, onDismiss = { remind = null }, title = "Remind me")
+        ActionSheet(actions, onDismiss = { remindKey = null }, title = "Remind me")
     }
 
     deleting?.let { email ->
@@ -287,7 +297,7 @@ fun InboxScreen(api: EmailApi, onOpen: (EmailSummary) -> Unit, onCompose: () -> 
             text = email.subject.ifBlank { "(no subject)" },
             confirm = "Delete",
             onConfirm = { vm.delete(email) },
-            onDismiss = { deleting = null },
+            onDismiss = { deletingKey = null },
         )
     }
     if (bulkDelete) {
@@ -305,7 +315,7 @@ fun InboxScreen(api: EmailApi, onOpen: (EmailSummary) -> Unit, onCompose: () -> 
             text = item.subject.ifBlank { "(no subject)" },
             confirm = "Cancel send",
             onConfirm = { vm.cancelScheduled(item) },
-            onDismiss = { cancelling = null },
+            onDismiss = { cancellingId = null },
         )
     }
 }

@@ -57,6 +57,9 @@ private val LONE_TAG = Regex("""</?(?:$BLOCK_TAGS|link|base|meta)\b[^>]*>""", Re
 private val STYLE_ATTR = Regex("""\bstyle\s*=\s*("([^"]*)"|'([^']*)')""", RegexOption.IGNORE_CASE)
 private val COLOR_ATTR = Regex("""\s(?:color|bgcolor|face|background)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)""", RegexOption.IGNORE_CASE)
 
+/** One start tag, quotes respected so a `>` inside an attribute value does not end it. */
+private val TAG = Regex("""<[a-zA-Z](?:"[^"]*"|'[^']*'|[^>"'])*>""")
+
 /** Declarations the web drops from inline styles so the theme can take over. */
 private val STRIPPED_PROPS = setOf("color", "background", "background-color", "font-family", "font", "-webkit-text-fill-color", "position", "z-index")
 
@@ -70,7 +73,13 @@ fun cleanMailHtml(html: String): String {
     var out = html
     // Nested or split tags can survive one pass, so repeat until stable (the web does 4).
     repeat(4) { out = LONE_TAG.replace(BLOCK_ELEMENT.replace(out, ""), "") }
-    out = COLOR_ATTR.replace(out, "")
+    // Attributes are only edited inside a tag: a message that says
+    // "set color=red" or "style = x" must keep its visible text.
+    return TAG.replace(out) { tag -> cleanAttributes(tag.value) }
+}
+
+private fun cleanAttributes(tag: String): String {
+    val out = COLOR_ATTR.replace(tag, "")
     return STYLE_ATTR.replace(out) { m ->
         val quote = m.groupValues[1][0]
         val value = m.groupValues[2].ifEmpty { m.groupValues[3] }
@@ -86,8 +95,8 @@ fun cleanMailHtml(html: String): String {
 
 /** Mail that refers to an http(s) image, which stays blocked until "Load images". */
 fun hasRemoteImages(html: String): Boolean =
-    Regex("""<img\b[^>]*\bsrc\s*=\s*["']?\s*https?:""", RegexOption.IGNORE_CASE).containsMatchIn(html) ||
-        Regex("""url\(\s*["']?\s*https?:""", RegexOption.IGNORE_CASE).containsMatchIn(html)
+    Regex("""<(?:img|source)\b[^>]*\b(?:src|srcset)\s*=\s*["']?\s*(?:https?:|//)""", RegexOption.IGNORE_CASE).containsMatchIn(html) ||
+        Regex("""url\(\s*["']?\s*(?:https?:|//)""", RegexOption.IGNORE_CASE).containsMatchIn(html)
 
 /**
  * The dark stylesheet. Like the web, the sender's colours, backgrounds, fonts

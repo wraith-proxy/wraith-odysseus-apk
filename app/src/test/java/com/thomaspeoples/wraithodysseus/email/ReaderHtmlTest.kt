@@ -114,6 +114,20 @@ class ReaderHtmlTest {
     }
 
     @Test
+    fun protocolRelativeAndSrcsetImagesAreDetected() {
+        assertTrue(hasRemoteImages("""<img src="//t.example/p.png">"""))
+        assertTrue(hasRemoteImages("""<img srcset="https://t.example/a.png 2x">"""))
+        assertTrue(hasRemoteImages("""<picture><source srcset="//t.example/a.webp"></picture>"""))
+    }
+
+    @Test
+    fun visibleTextIsNotTreatedAsAttributes() {
+        val out = cleanMailHtml("""<p style="color:red">set color=red and style = "x" please</p>""")
+        assertTrue(out.contains("""set color=red and style = "x" please"""))
+        assertFalse(out.contains("color:red"))
+    }
+
+    @Test
     fun htmlOnlyMailGetsAPlainText() {
         assertEquals("Hi\n\nA & B <ok>", htmlToText("<style>p{}</style><p>Hi</p>A &amp; B &lt;ok&gt;"))
     }

@@ -232,6 +232,8 @@ internal fun AttachmentsBlock(
     attachments: List<EmailAttachment>,
     related: List<EmailAttachment>,
     loading: Boolean,
+    failed: Boolean,
+    onRetry: () -> Unit,
     busyKey: String?,
     onOpen: (EmailAttachment) -> Unit,
     onCalendar: (EmailAttachment) -> Unit,
@@ -245,6 +247,13 @@ internal fun AttachmentsBlock(
         Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
             Text("Checking attachments…", style = MaterialTheme.typography.labelSmall, color = Muted, modifier = Modifier.padding(start = 8.dp))
+        }
+        return
+    }
+    if (failed) {
+        Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Could not load attachments", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+            TextButton(onClick = onRetry) { Text("Retry") }
         }
         return
     }

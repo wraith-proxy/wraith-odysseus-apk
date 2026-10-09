@@ -169,7 +169,8 @@ class EmailApi(private val http: Http, private val sendTimeoutSeconds: Long = Ht
     }
 
     /** INBOX, filter=unread, limit 50. [accountId] null omits the parameter. */
-    suspend fun unreadPage(accountId: String?, offset: Int): EmailPage = listPage(accountId, INBOX, "unread", offset)
+    suspend fun unreadPage(accountId: String?, offset: Int, refresh: Boolean = false): EmailPage =
+        listPage(accountId, INBOX, "unread", offset, refresh = refresh)
 
     /**
      * One page of GET /list, [PAGE_SIZE] rows. [cachedOnly] asks for the
