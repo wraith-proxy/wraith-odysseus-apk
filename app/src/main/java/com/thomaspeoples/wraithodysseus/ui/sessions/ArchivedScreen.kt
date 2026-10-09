@@ -117,8 +117,12 @@ fun ArchivedScreen(ctl: ArchivedController, onOpen: (String) -> Unit, onBack: ()
             if (ctl.hasMore) {
                 item(key = "more") {
                     // Composed only once the end is reached, which asks for the next page.
-                    LaunchedEffect(ctl.rows.size) { ctl.loadMore() }
-                    Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(Modifier.size(20.dp)) }
+                    if (ctl.moreFailed) {
+                        TextButton(onClick = ctl::loadMore, modifier = Modifier.fillMaxWidth()) { Text("Retry loading more") }
+                    } else {
+                        LaunchedEffect(ctl.rows.size) { ctl.loadMore() }
+                        Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(Modifier.size(20.dp)) }
+                    }
                 }
             }
         }
@@ -131,7 +135,7 @@ fun ArchivedScreen(ctl: ArchivedController, onOpen: (String) -> Unit, onBack: ()
             actions = listOf(
                 SheetAction("Open", Lucide.MessageSquare) { onOpen(s.id) },
                 SheetAction("Restore", Lucide.ArchiveRestore) { ctl.restore(s) },
-                SheetAction("Delete", Lucide.Trash2, destructive = true) { ctl.deleting = s },
+                SheetAction("Delete", Lucide.Trash2, destructive = true) { ctl.askDelete(s) },
             ),
         )
     }

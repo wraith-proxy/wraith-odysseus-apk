@@ -70,7 +70,7 @@ fun sessionIcon(s: ChatSession): ImageVector = when {
     s.hasDocuments -> Lucide.FileText
     s.hasImages -> Lucide.Image
     s.mode == "agent" -> Lucide.Terminal
-    s.mode?.startsWith("research") == true -> Lucide.Search
+    s.mode == "research" -> Lucide.Search // exact, as sessions.js: research_pending is not yet research
     else -> Lucide.MessageSquare
 }
 
@@ -266,7 +266,10 @@ fun ChatListDialogs(ctl: ChatListController, all: List<ChatSession>) {
         ConfirmDialog(
             title = "Delete $n ${if (n == 1) "chat" else "chats"}?",
             text = "This cannot be undone." +
-                if (plan.skippedStarred > 0) " ${plan.skippedStarred} favourite(s) will be skipped: unfavorite them first." else "",
+                if (plan.skippedStarred > 0) {
+                    val k = plan.skippedStarred
+                    " $k ${if (k == 1) "favorite" else "favorites"} will be skipped: unfavorite them first."
+                } else "",
             confirm = "Delete",
             onConfirm = { ctl.deleteSelected(plan) },
             onDismiss = { ctl.confirmBulkDelete = null },

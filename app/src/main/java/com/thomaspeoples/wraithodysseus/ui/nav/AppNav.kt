@@ -29,6 +29,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
+import com.thomaspeoples.wraithodysseus.ui.sessions.chatListSaver
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -234,7 +235,7 @@ fun AppNav() {
             leaveChat(open)
         }
     }
-    val chatList = remember {
+    val makeChatList = {
         ChatListController(
             api = SessionsApi(app.http, chatApi),
             prefs = app.getSharedPreferences("sessions", Context.MODE_PRIVATE),
@@ -252,6 +253,11 @@ fun AppNav() {
             onRemoved = { removed(it) },
         )
     }
+    // Select mode and expanded groups survive rotation and process death.
+    val chatList = rememberSaveable(saver = chatListSaver(makeChatList), init = makeChatList)
+
+    // A stale selection or open dialog must not reach the next account.
+    LaunchedEffect(loggedIn) { if (!loggedIn) chatList.reset() }
 
     fun openDrawer() {
         scope.launch { drawer.open() }
@@ -390,6 +396,9 @@ fun AppNav() {
                         val archived = remember {
                             ArchivedController(SessionsApi(app.http, chatApi), archivedScope, { snackbar.showSnackbar(it) })
                         }
+                        // Known limit: the web previews an archived chat read-only (sessions.js
+                        // _arcPeekOpen), but here it opens as a normal chat. The server accepts a
+                        // send to it and leaves it archived; Restore first to see it in the drawer.
                         ArchivedScreen(archived, onOpen = { nav.openChat(it) }, onBack = { nav.popBackStack() })
                     }
                     composable(Routes.SEARCH) {
@@ -490,7 +499,8 @@ private fun NavHostController.openChat(sid: String) =
 /** Anywhere else from the drawer goes on top of the chat (or Home, with no
  * chat yet), replacing whatever the drawer opened before. */
 private fun NavHostController.openOnTop(route: String) {
-    val root = if (runCatching { getBackStackEntry(Routes.CHAT) }.isSuccess) Routes.CHAT else Routes.HOME
+    // The empty new chat is a root too, or each destination would stack on it.
+    val root = listOf(Routes.CHAT, Routes.NEW).firstOrNull { runCatching { getBackStackEntry(it) }.isSuccess } ?: Routes.HOME
     navigate(route) {
         popUpTo(root)
         launchSingleTop = true

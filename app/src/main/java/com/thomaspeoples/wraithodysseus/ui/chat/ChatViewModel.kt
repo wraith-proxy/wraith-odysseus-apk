@@ -394,6 +394,9 @@ class ChatViewModel(
             if (id == null) {
                 say("No model available")
             } else {
+                // Known limit: from here the first message lives only in AppNav's
+                // in-memory handoff, so process death in this instant loses it and
+                // leaves an empty chat. Keeping the draft instead would show it twice.
                 draft = ""
                 attachments = emptyList()
                 openCreated(id, FirstSend(text, files, toggles.takeIf { togglesSet }, m))

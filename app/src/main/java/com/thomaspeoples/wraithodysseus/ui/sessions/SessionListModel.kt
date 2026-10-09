@@ -148,9 +148,9 @@ suspend fun bulkRun(ids: List<String>, op: suspend (String) -> Unit): BulkResult
     return BulkResult(done, failed, error)
 }
 
-/** "3 chats deleted, 1 favourite skipped, 1 failed: reason". */
+/** "3 chats deleted, 1 favorite skipped, 1 failed: reason". */
 fun bulkSummary(verb: String, result: BulkResult, skippedStarred: Int): String = buildList {
     add("${result.done.size} ${if (result.done.size == 1) "chat" else "chats"} $verb")
-    if (skippedStarred > 0) add("$skippedStarred ${if (skippedStarred == 1) "favourite" else "favourites"} skipped")
+    if (skippedStarred > 0) add("$skippedStarred ${if (skippedStarred == 1) "favorite" else "favorites"} skipped")
     if (result.failed > 0) add("${result.failed} failed" + (result.error?.let { ": $it" } ?: ""))
 }.joinToString(", ")

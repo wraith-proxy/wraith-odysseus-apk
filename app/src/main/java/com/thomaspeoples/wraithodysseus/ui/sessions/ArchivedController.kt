@@ -37,6 +37,9 @@ class ArchivedController(
         private set
     var error by mutableStateOf<String?>(null)
         private set
+    /** The next page failed to load: the list shows Retry instead of asking again by itself. */
+    var moreFailed by mutableStateOf(false)
+        private set
     var search by mutableStateOf("")
     var sort by mutableStateOf(ArchiveSort.Recent)
 
@@ -53,6 +56,7 @@ class ArchivedController(
         job?.cancel()
         loading = true
         error = null
+        moreFailed = false
         job = scope.launch {
             try {
                 val page = api.archived(search, 0, sort = sort)
@@ -73,6 +77,7 @@ class ArchivedController(
     fun loadMore() {
         if (loading || loadingMore || !hasMore) return
         loadingMore = true
+        moreFailed = false
         val query = search
         val order = sort
         scope.launch {
@@ -85,10 +90,13 @@ class ArchivedController(
                     total = page.total
                 }
             } catch (e: ApiException) {
+                moreFailed = true
                 say(userMessage(e))
             } catch (e: IOException) {
+                moreFailed = true
                 say(userMessage(e))
             } catch (e: JSONException) {
+                moreFailed = true
                 say(userMessage(e))
             }
             loadingMore = false
@@ -96,6 +104,11 @@ class ArchivedController(
     }
 
     fun restore(s: ArchivedSession) = change(s, "Chat restored") { api.unarchive(s.id) }
+
+    /** A favorite is refused before asking, as the web does; the server would answer 403. */
+    fun askDelete(s: ArchivedSession) {
+        if (s.isImportant) scope.launch { say(SessionsApi.UNFAVORITE_FIRST) } else deleting = s
+    }
 
     fun delete(s: ArchivedSession) = change(s, "Chat deleted") { api.delete(s.id) }
 

@@ -33,7 +33,7 @@ class ChatListTest {
         assertSame(Lucide.Bookmark, sessionIcon(s("a", "", important = true, mode = "agent")))
         assertSame(Lucide.GitFork, sessionIcon(s("a", "", name = "⫝ Plan")))
         assertSame(Lucide.Terminal, sessionIcon(s("a", "", mode = "agent")))
-        assertSame(Lucide.Search, sessionIcon(s("a", "", mode = "research_pending")))
+        assertSame(Lucide.MessageSquare, sessionIcon(s("a", "", mode = "research_pending")))
         assertSame(Lucide.MessageSquare, sessionIcon(s("a", "", mode = null)))
     }
 }
@@ -174,7 +174,7 @@ class ChatListModelTest {
         assertEquals(listOf("a", "b", "c"), sent)
         assertEquals(listOf("a", "c"), r.done)
         assertEquals(1, r.failed)
-        assertEquals("2 chats deleted, 1 favourite skipped, 1 failed: Unstar the session before deleting it", bulkSummary("deleted", r, 1))
+        assertEquals("2 chats deleted, 1 favorite skipped, 1 failed: Unstar the session before deleting it", bulkSummary("deleted", r, 1))
     }
 
     @Test

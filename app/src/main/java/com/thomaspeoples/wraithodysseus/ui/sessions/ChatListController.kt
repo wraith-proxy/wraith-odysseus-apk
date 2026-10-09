@@ -52,6 +52,26 @@ class ChatListController(
         private set
     var confirmBulkDelete by mutableStateOf<BulkPlan?>(null)
 
+    /** Back to a clean slate for the next account: no select mode, no open menu or dialog. */
+    fun reset() {
+        endSelect()
+        expanded = emptySet()
+        sortMenu = false
+        menuFor = null
+        renaming = null
+        moving = null
+        newFolderFor = null
+        deleting = null
+        confirmBulkDelete = null
+    }
+
+    /** Puts back what [rememberSaveable] kept across a rotation or process death. */
+    fun restore(selecting: Boolean, selected: Collection<String>, expanded: Collection<String>) {
+        this.selecting = selecting
+        this.selected = selected.toSet()
+        this.expanded = expanded.toSet()
+    }
+
     fun sortBy(mode: SortMode) {
         sort = mode
         prefs.edit().putString(SORT, mode.key).apply()
@@ -99,7 +119,7 @@ class ChatListController(
         }
     }
 
-    /** Asks first, naming how many favourites will be left alone. */
+    /** Asks first, naming how many favorites will be left alone. */
     fun askDeleteSelected(all: List<ChatSession>) {
         val plan = bulkDeletePlan(selected, all)
         if (plan.ids.isEmpty()) {
@@ -190,3 +210,14 @@ class ChatListController(
         const val COLLAPSED = "collapsed"
     }
 }
+
+/** Keeps select mode and expanded groups through rotation and process death; the rest is rebuilt. */
+fun chatListSaver(make: () -> ChatListController): androidx.compose.runtime.saveable.Saver<ChatListController, Any> =
+    androidx.compose.runtime.saveable.Saver(
+        save = { arrayListOf(it.selecting, ArrayList(it.selected), ArrayList(it.expanded)) },
+        restore = { saved ->
+            @Suppress("UNCHECKED_CAST")
+            val l = saved as List<Any>
+            make().also { it.restore(l[0] as Boolean, l[1] as List<String>, l[2] as List<String>) }
+        },
+    )
