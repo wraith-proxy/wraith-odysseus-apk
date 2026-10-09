@@ -69,6 +69,7 @@ fun AppDrawer(
     onEmail: () -> Unit,
     onCompose: () -> Unit,
     onTool: (Tool) -> Unit,
+    onArchived: () -> Unit,
     onSettings: () -> Unit,
 ) {
     var toolsOpen by rememberSaveable { mutableStateOf(true) }
@@ -106,6 +107,7 @@ fun AppDrawer(
                     Box(Modifier.fillMaxWidth().padding(12.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(Modifier.size(20.dp)) }
                 }
             }
+            item(key = "archived") { DrawerRow(Lucide.Archive, "Archived chats", onArchived) }
             item(key = "email") {
                 DrawerRow(Lucide.Mail, stringResource(R.string.nav_email), onEmail) {
                     IconButton(onClick = onCompose) { Icon(Lucide.Plus, "New email", tint = Muted, modifier = Modifier.size(18.dp)) }

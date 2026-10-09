@@ -46,7 +46,6 @@ import com.thomaspeoples.wraithodysseus.auth.AuthStatus
 import com.thomaspeoples.wraithodysseus.chat.ChatApi
 import com.thomaspeoples.wraithodysseus.chat.ChatSession
 import com.thomaspeoples.wraithodysseus.chat.SessionsApi
-import com.thomaspeoples.wraithodysseus.chat.newChat
 import com.thomaspeoples.wraithodysseus.email.EmailApi
 import com.thomaspeoples.wraithodysseus.net.ApiException
 import com.thomaspeoples.wraithodysseus.ui.about.AboutScreen
@@ -65,11 +64,16 @@ import com.thomaspeoples.wraithodysseus.ui.email.emailReadRoute
 import com.thomaspeoples.wraithodysseus.ui.faq.FaqScreen
 import com.thomaspeoples.wraithodysseus.ui.icons.Lucide
 import com.thomaspeoples.wraithodysseus.ui.login.LoginScreen
+import com.thomaspeoples.wraithodysseus.ui.sessions.ArchivedController
+import com.thomaspeoples.wraithodysseus.ui.sessions.ArchivedScreen
 import com.thomaspeoples.wraithodysseus.ui.sessions.ChatListController
+import com.thomaspeoples.wraithodysseus.ui.settings.AccountScreen
 import com.thomaspeoples.wraithodysseus.ui.settings.SettingsScreen
 import com.thomaspeoples.wraithodysseus.ui.tools.Tool
 import com.thomaspeoples.wraithodysseus.ui.tools.ToolEnv
 import com.thomaspeoples.wraithodysseus.ui.tools.ToolScreen
+import com.thomaspeoples.wraithodysseus.chat.FirstSend
+import com.thomaspeoples.wraithodysseus.chat.ModelChoice
 import com.thomaspeoples.wraithodysseus.ui.update.UpdateAvailableDialog
 import com.thomaspeoples.wraithodysseus.update.UpdateChecker
 import java.io.IOException
@@ -85,6 +89,10 @@ object Routes {
     /** Straight on to the most recent chat; only an account with none stays. */
     const val HOME = "home"
     const val CHAT = "chat/{sid}"
+    /** A chat that exists only on the phone until its first message is sent. */
+    const val NEW = "new"
+    const val ARCHIVED = "archived"
+    const val ACCOUNT = "account"
     const val SEARCH = "search"
     const val EMAIL = "email"
     const val EMAIL_READ = "email/read/{acct}/{folder}/{uid}"
@@ -95,7 +103,6 @@ object Routes {
     const val FAQ = "faq"
 }
 
-private const val NO_MODEL = "No chat model is set up. Add one in the web UI."
 private const val NO_BROWSER = "No browser to open it with"
 
 /**
@@ -196,6 +203,11 @@ fun AppNav() {
         refreshSessions()
     }
 
+    // The model "+ New" was pressed in, and the first message of a chat made
+    // by its first send, for the screen that opens next to pick up once.
+    var newSeed by remember { mutableStateOf<ModelChoice?>(null) }
+    var handoff by remember { mutableStateOf<Pair<String, FirstSend>?>(null) }
+
     // Chats this app has a reply running in: only the open one can, since
     // leaving a chat ends its follower.
     var runningIds by remember { mutableStateOf(emptySet<String>()) }
@@ -245,20 +257,15 @@ fun AppNav() {
         }
     }
 
-    fun newChat() {
-        scope.launch {
-            try {
-                val id = chatApi.newChat()
-                if (id == null) snackbar.showSnackbar(NO_MODEL) else nav.openChat(id)
-            } catch (e: ApiException) {
-                snackbar.showSnackbar(userMessage(e))
-            } catch (e: IOException) {
-                snackbar.showSnackbar(userMessage(e))
-            } catch (e: JSONException) {
-                snackbar.showSnackbar(userMessage(e))
-            }
-        }
+    /** The empty new chat. Nothing is made on the server until its first
+     * message is sent, so opening it again and again leaves no empty chats. */
+    fun openNewChat(model: ModelChoice?) {
+        if (route == Routes.NEW) return
+        newSeed = model
+        nav.navigate(Routes.NEW) { popUpTo(nav.graph.id) { inclusive = true } }
     }
+
+    fun newChat() = openNewChat(null)
 
     fun openWebUi() {
         val url = app.session.baseUrl?.toString()
@@ -297,6 +304,7 @@ fun AppNav() {
                     onEmail = { fromDrawer { nav.openOnTop(Routes.EMAIL) } },
                     onCompose = { fromDrawer { nav.openOnTop(Routes.EMAIL_COMPOSE) } },
                     onTool = { tool -> fromDrawer { if (tool.webOnly) openWebUi() else nav.openOnTop("tool/" + tool.id) } },
+                    onArchived = { fromDrawer { nav.openOnTop(Routes.ARCHIVED) } },
                     onSettings = { fromDrawer { nav.openOnTop(Routes.SETTINGS) } },
                 )
             },
@@ -338,6 +346,10 @@ fun AppNav() {
                             canUseBash = canUseBash,
                             onMenu = ::openDrawer,
                             onOpenChat = { nav.openChat(it) },
+                            onNewChat = ::openNewChat,
+                            takeFirst = {
+                                handoff?.takeIf { it.first == chat.arguments?.getString("sid") }?.second.also { handoff = null }
+                            },
                         )
                         // ChatScreen made its view model; this reads two things off it
                         // (the header menu and slash commands are not this file's).
@@ -348,6 +360,29 @@ fun AppNav() {
                             onDispose { runningIds = runningIds - sid }
                         }
                         LaunchedEffect(vm.closed) { vm.closed?.let { leaveChat(sid, it) } }
+                    }
+                    composable(Routes.NEW) {
+                        val canUseBash by produceState(false) { value = loadStatus(app)?.canUseBash ?: false }
+                        ChatScreen(
+                            api = chatApi,
+                            sessionId = "",
+                            canUseBash = canUseBash,
+                            onMenu = ::openDrawer,
+                            onOpenChat = { nav.openChat(it) },
+                            onNewChat = ::openNewChat,
+                            onCreated = { id, first ->
+                                handoff = id to first
+                                nav.openChat(id)
+                            },
+                            startModel = newSeed,
+                        )
+                    }
+                    composable(Routes.ARCHIVED) {
+                        val archivedScope = rememberCoroutineScope()
+                        val archived = remember {
+                            ArchivedController(SessionsApi(app.http, chatApi), archivedScope, { snackbar.showSnackbar(it) })
+                        }
+                        ArchivedScreen(archived, onOpen = { nav.openChat(it) }, onBack = { nav.popBackStack() })
                     }
                     composable(Routes.SEARCH) {
                         SearchScreen(
@@ -382,8 +417,19 @@ fun AppNav() {
                             username = app.session.username,
                             status = status,
                             onMenu = ::openDrawer,
+                            onAccount = { nav.navigate(Routes.ACCOUNT) { launchSingleTop = true } },
                             onAbout = { nav.navigate(Routes.ABOUT) { launchSingleTop = true } },
                             onFaq = { nav.navigate(Routes.FAQ) { launchSingleTop = true } },
+                            onLogout = ::logout,
+                        )
+                    }
+                    composable(Routes.ACCOUNT) {
+                        val auth = remember { AuthRepo(app.http, app.session) }
+                        AccountScreen(
+                            username = app.session.username,
+                            status = status,
+                            auth = auth,
+                            onBack = { nav.popBackStack() },
                             onLogout = ::logout,
                         )
                     }

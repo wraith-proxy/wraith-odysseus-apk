@@ -125,4 +125,43 @@ class SessionsApiTest {
         server.enqueue(ok("""{"history":[]}"""))
         assertNull(api.chatText("s1"))
     }
+
+    private fun fixture(name: String) =
+        checkNotNull(javaClass.classLoader?.getResource("fixtures/$name")) { name }.readText()
+
+    @Test
+    fun archivedAsksForAPageWithTheSearchAndSortAndParsesIt() = runBlocking {
+        server.enqueue(ok(fixture("sessions_archived.json")))
+        val page = api.archived(" trip ", 20, sort = ArchiveSort.MostMessages)
+        val r = server.takeRequest()
+        assertEquals("GET", r.method)
+        assertEquals("/api/sessions/archived?offset=20&limit=20&sort=most-messages&search=trip", r.path)
+        assertEquals(41, page.total)
+        assertEquals(2, page.sessions.size)
+        val first = page.sessions[0]
+        assertEquals("Old trip plan", first.name)
+        assertEquals("org/qwen3-30b-a3b", first.model)
+        assertEquals(14, first.messageCount)
+        assertEquals("2026-09-02T09:30:00.000000", first.updatedAt)
+        // A null model and null times are tolerated.
+        assertNull(page.sessions[1].model)
+        assertEquals("", page.sessions[1].updatedAt)
+        assertTrue(page.sessions[1].isImportant)
+    }
+
+    @Test
+    fun archivedLeavesOutAnEmptySearch() = runBlocking {
+        server.enqueue(ok("""{"sessions": [], "total": 0}"""))
+        assertEquals(0, api.archived("  ", 0).sessions.size)
+        assertEquals("/api/sessions/archived?offset=0&limit=20&sort=recent", server.takeRequest().path)
+    }
+
+    @Test
+    fun unarchiveIsAPostToUnarchiveNotRestore() = runBlocking {
+        server.enqueue(ok("""{"status": "unarchived"}"""))
+        api.unarchive("s 1")
+        val r = server.takeRequest()
+        assertEquals("POST", r.method)
+        assertEquals("/api/session/s%201/unarchive", r.path)
+    }
 }

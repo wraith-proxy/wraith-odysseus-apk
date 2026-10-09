@@ -1,0 +1,4 @@
+{"sessions": [
+  {"id": "a1111111-0000-4000-8000-000000000001", "name": "Old trip plan", "model": "org/qwen3-30b-a3b", "message_count": 14, "created_at": "2026-09-01T08:00:00.000000", "updated_at": "2026-09-02T09:30:00.000000", "is_important": false},
+  {"id": "a1111111-0000-4000-8000-000000000002", "name": "Untitled draft", "model": null, "message_count": 0, "created_at": null, "updated_at": null, "is_important": true}
+], "total": 41}

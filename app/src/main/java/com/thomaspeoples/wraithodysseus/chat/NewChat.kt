@@ -37,3 +37,11 @@ suspend fun ChatApi.newChat(now: LocalTime = LocalTime.now()): String? {
 /** Creates a chat on [model], the one the open chat is on: "+ New" and /new. */
 suspend fun ChatApi.newChatOn(model: ModelChoice, now: LocalTime = LocalTime.now()): String =
     createSession(newChatName(model.model, newChatTime(now)), model.endpointId, model.model)
+
+/**
+ * What the first send of a new chat carries into the chat it has just
+ * created: the message, the files uploaded for it, the switches if the user
+ * set them and the model chosen. A plain holder; the chat screen takes it
+ * once.
+ */
+class FirstSend(val text: String, val files: List<UploadedFile>, val toggles: Toggles?, val model: ModelChoice?)

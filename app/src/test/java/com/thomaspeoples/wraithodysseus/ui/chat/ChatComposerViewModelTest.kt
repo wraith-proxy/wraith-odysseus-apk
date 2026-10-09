@@ -70,6 +70,9 @@ class ChatComposerViewModelTest {
                 }
                 path == "/api/chat/resume/s1" -> MockResponse().setResponseCode(404)
                 path == "/api/research/chat-jobs/s1" -> json("""{"jobs":[]}""")
+                path == "/api/default-chat" -> json(fixture("default_chat.json"))
+                path == "/api/upload" -> json("""{"files":[{"id":"f1","name":"a.txt","mime":"text/plain"}]}""")
+                path == "/api/session" && failCreate -> json(fixture("session_create_400.json"), 400)
                 path == "/api/session" -> json(fixture("session_create.json"))
                 path == "/api/session/s1/fork" -> json(fixture("fork_ok.json"))
                 path == "/api/session/s1/compact" -> json(fixture("compact_ok.json"))
@@ -84,6 +87,7 @@ class ChatComposerViewModelTest {
     }
 
     @Volatile private var failSwitch = false
+    @Volatile private var failCreate = false
 
     @Before
     fun setUp() {
@@ -278,19 +282,22 @@ class ChatComposerViewModelTest {
     }
 
     @Test
-    fun newCommandStartsAChatOnTheSameModel() = runBlocking {
+    fun newCommandOpensAnEmptyChatOnTheSameModelWithoutCreatingOne() = runBlocking {
         val vm = vm()
         vm.ready()
         until("models") { vm.models.isNotEmpty() }
-        var opened: String? = null
-        vm.openChat = { opened = it }
+        var model: com.thomaspeoples.wraithodysseus.chat.ModelChoice? = null
+        var opened = false
+        vm.openNew = {
+            model = it
+            opened = true
+        }
         vm.draft = "/new"
         vm.send()
-        until("opened") { opened != null }
-        assertEquals("7d3c2f0e-1111-4a2b-9c3d-000000000001", opened)
-        val create = calls("/api/session").single()
-        assertEquals("ep_local01", field(create, "endpoint_id"))
-        assertEquals("org/qwen3-30b-a3b", field(create, "model"))
+        until("opened") { opened }
+        assertEquals("ep_local01", model?.endpointId)
+        assertEquals("org/qwen3-30b-a3b", model?.model)
+        assertTrue(calls("/api/session").isEmpty())
     }
 
     @Test
@@ -298,11 +305,101 @@ class ChatComposerViewModelTest {
         val vm = vm()
         vm.ready()
         until("models") { vm.models.isNotEmpty() }
-        var opened: String? = null
-        vm.openChat = { opened = it }
+        var opened = false
+        vm.openNew = { opened = true }
         vm.newChat()
-        until("opened") { opened != null }
-        assertEquals("ep_local01", field(calls("/api/session").single(), "endpoint_id"))
+        until("opened") { opened }
+        assertTrue(calls("/api/session").isEmpty())
+    }
+
+    // -- a new chat is made by its first send --------------------------------
+
+    private fun CoroutineScope.draftVm() = ChatViewModel(
+        api = ChatApi(Http(FakeSession(server.url("/"), SessionCookie("abc123", Long.MAX_VALUE, secure = false)))),
+        sessionId = "",
+        saved = SavedStateHandle(),
+        scope = this,
+        jobPollMs = 10,
+    )
+
+    @Test
+    fun aNewChatCreatesNothingUntilTheFirstSend() = runBlocking {
+        val vm = draftVm()
+        until("model picked") { vm.selected != null }
+        // Typing and attaching, the model shown and the screen coming to the front: no session.
+        vm.draft = "hello"
+        vm.attachFile { Triple("a.txt", "text/plain", "abc".toByteArray()) }.join()
+        vm.onResume()
+        vm.onResume()
+        vm.onResume()
+        vm.loadChatInfo()
+        vm.refreshContext()
+        assertEquals("ep_local01", vm.selected?.endpointId)
+        assertTrue(calls("/api/session").isEmpty())
+        assertTrue(calls("/api/sessions").isEmpty())
+        assertTrue(synchronized(calls) { calls.none { it.path.startsWith("/api/history") } })
+        assertTrue(calls("/api/chat_stream").isEmpty())
+        assertEquals(1, vm.attachments.size)
+    }
+
+    @Test
+    fun theFirstSendCreatesTheNamedSessionThenHandsTheMessageToIt() = runBlocking {
+        val vm = draftVm()
+        until("model picked") { vm.selected != null }
+        vm.draft = "hello"
+        vm.attachFile { Triple("a.txt", "text/plain", "abc".toByteArray()) }.join()
+        var created: Pair<String, com.thomaspeoples.wraithodysseus.chat.FirstSend>? = null
+        vm.openCreated = { id, first -> created = id to first }
+        vm.send()
+        until("created") { created != null }
+
+        val create = calls("/api/session").single()
+        assertEquals("ep_local01", field(create, "endpoint_id"))
+        assertEquals("qwen3-30b-a3b", field(create, "model"))
+        // "<model basename> H:mm:ss", the shape the server auto-titles.
+        assertTrue(field(create, "name").orEmpty(), Regex("""qwen3-30b-a3b \d{1,2}:\d{2}:\d{2}""").matches(field(create, "name").orEmpty()))
+        // The message is not sent from here: it goes with the new id.
+        assertTrue(calls("/api/chat_stream").isEmpty())
+        val (id, first) = created!!
+        assertEquals("7d3c2f0e-1111-4a2b-9c3d-000000000001", id)
+        assertEquals("hello", first.text)
+        assertEquals(1, first.files.size)
+        assertEquals("", vm.draft)
+    }
+
+    @Test
+    fun theChatThatWasCreatedSendsTheFirstMessageIntoItsOwnId() = runBlocking {
+        val vm = vm()
+        val first = com.thomaspeoples.wraithodysseus.chat.FirstSend("hello", emptyList(), null, null)
+        vm.sendFirst(first)
+        until("sent") { calls("/api/chat_stream").isNotEmpty() }
+        assertEquals("hello", field(calls("/api/chat_stream").single(), "message"))
+        assertEquals("s1", field(calls("/api/chat_stream").single(), "session"))
+    }
+
+    @Test
+    fun aFailedCreateKeepsTheMessageInTheComposer() = runBlocking {
+        failCreate = true
+        val vm = draftVm()
+        until("model picked") { vm.selected != null }
+        vm.draft = "keep me"
+        var created = false
+        vm.openCreated = { _, _ -> created = true }
+        vm.send()
+        until("create tried") { calls("/api/session").isNotEmpty() && !vm.running }
+        assertFalse(created)
+        assertEquals("keep me", vm.draft)
+    }
+
+    @Test
+    fun aCommandInANewChatIsNotSentToTheModel() = runBlocking {
+        val vm = draftVm()
+        until("model picked") { vm.selected != null }
+        vm.draft = "/compact"
+        vm.send()
+        assertEquals("Commands work once the chat has started", withTimeout(5_000) { vm.notices.first() })
+        assertTrue(calls("/api/session").isEmpty())
+        assertTrue(calls("/api/chat_stream").isEmpty())
     }
 
     @Test

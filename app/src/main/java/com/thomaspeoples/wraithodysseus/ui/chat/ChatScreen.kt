@@ -20,6 +20,10 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -41,7 +45,12 @@ import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.thomaspeoples.wraithodysseus.chat.ChatApi
 import com.thomaspeoples.wraithodysseus.chat.HistoryMessage
+import com.thomaspeoples.wraithodysseus.chat.FirstSend
 import com.thomaspeoples.wraithodysseus.chat.MediaPlayerOutput
+import com.thomaspeoples.wraithodysseus.chat.ModelChoice
+import com.thomaspeoples.wraithodysseus.chat.groupModels
+import com.thomaspeoples.wraithodysseus.chat.label
+import com.thomaspeoples.wraithodysseus.ui.icons.Lucide
 import com.thomaspeoples.wraithodysseus.ui.chat.parts.ResearchJobCards
 import com.thomaspeoples.wraithodysseus.ui.common.ConfirmDialog
 import com.thomaspeoples.wraithodysseus.ui.common.LocalSnackbar
@@ -61,16 +70,28 @@ fun ChatScreen(
     onMenu: () -> Unit,
     /** Opens another chat by id: where Fork lands once the copy exists. */
     onOpenChat: (String) -> Unit = {},
+    /** "+ New" and /new: the empty new chat, on this model if known. Nothing is created yet. */
+    onNewChat: (ModelChoice?) -> Unit = {},
+    /** The first send of a new chat made the session: open it, carrying the message. */
+    onCreated: (String, FirstSend) -> Unit = { id, _ -> onOpenChat(id) },
+    /** The message a new chat was made for, handed over once by the screen before it. */
+    takeFirst: () -> FirstSend? = { null },
+    /** The model a new chat starts on, when it is not the account's default. */
+    startModel: ModelChoice? = null,
 ) {
     val context = LocalContext.current
     val cacheDir = context.applicationContext.cacheDir
     val vm = viewModel(key = sessionId) {
-        ChatViewModel(api, sessionId, createSavedStateHandle(), speech = MediaPlayerOutput(cacheDir), canUseBash = canUseBash)
+        ChatViewModel(api, sessionId, createSavedStateHandle(), speech = MediaPlayerOutput(cacheDir), canUseBash = canUseBash, startModel = startModel)
     }
     vm.canUseBash = canUseBash
     val snackbar = LocalSnackbar.current
     LaunchedEffect(vm) { vm.notices.collect { snackbar.showSnackbar(it) } }
     vm.openChat = onOpenChat
+    vm.openNew = onNewChat
+    vm.openCreated = onCreated
+    // Once: takeFirst gives it up on the first call, so a rotation does not send it again.
+    LaunchedEffect(vm) { takeFirst()?.let(vm::sendFirst) }
 
     // The header's name, the chat's own mode for the switches, and the ring:
     // asked on opening and again each time a run (or another action) ends.
@@ -93,19 +114,23 @@ fun ChatScreen(
             .systemBarsPadding()
             .imePadding(),
     ) {
-        ChatHeader(
-            vm,
-            onMenu,
-            onRing = { ringOpen = true },
-            onCopy = {
-                scope.launch {
-                    vm.transcript()?.let { text ->
-                        context.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText("chat", text))
-                        snackbar.showSnackbar("Chat copied")
+        if (vm.isDraft) {
+            DraftHeader(vm, onMenu)
+        } else {
+            ChatHeader(
+                vm,
+                onMenu,
+                onRing = { ringOpen = true },
+                onCopy = {
+                    scope.launch {
+                        vm.transcript()?.let { text ->
+                            context.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText("chat", text))
+                            snackbar.showSnackbar("Chat copied")
+                        }
                     }
-                }
-            },
-        )
+                },
+            )
+        }
 
         val bottomFirst = remember(vm.messages) { vm.messages.asReversed() }
         // Rewrite is offered on the last reply only: the server rewrites its last assistant row.
@@ -140,7 +165,7 @@ fun ChatScreen(
             }
             if (vm.hasOlder) item { TextButton(onClick = { vm.loadOlder() }) { Text("Load older") } }
             if (vm.loading) item { Text("Loading…", color = Muted) }
-            else if (vm.messages.isEmpty() && vm.live == null) item { Text("No messages yet.", color = Muted) }
+            else if (vm.messages.isEmpty() && vm.live == null) item { Text(if (vm.isDraft) "Send a message to start the chat." else "No messages yet.", color = Muted) }
         }
 
         vm.ask?.takeIf { it.approvalId != null }?.let { ApprovalSheet(it, vm::decide) }
@@ -199,6 +224,39 @@ fun ChatScreen(
             confirmButton = { TextButton(onClick = { vm.helpText = null }) { Text("OK") } },
             containerColor = MaterialTheme.colorScheme.surface,
         )
+    }
+}
+
+/**
+ * The header of a chat that does not exist yet: no title, count or actions
+ * (there is nothing to rename, copy or delete), only the model the first
+ * message will go to, which can be changed before it is sent.
+ */
+@Composable
+private fun DraftHeader(vm: ChatViewModel, onMenu: () -> Unit) {
+    var picker by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("New chat", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f).padding(start = 8.dp))
+            IconButton(onClick = onMenu) { Icon(Lucide.Menu, "Menu") }
+        }
+        Box {
+            TextButton(onClick = { picker = true }, enabled = vm.models.isNotEmpty() && !vm.running) {
+                Text(vm.selected?.label ?: "Model", style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Icon(Lucide.ChevronDown, null, Modifier.padding(start = 4.dp))
+            }
+            DropdownMenu(expanded = picker, onDismissRequest = { picker = false }) {
+                groupModels(vm.models).forEach { group ->
+                    Text(group.provider, color = Muted, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+                    group.models.forEach { m ->
+                        DropdownMenuItem(text = { Text(m.label) }, onClick = {
+                            vm.selected = m
+                            picker = false
+                        })
+                    }
+                }
+            }
+        }
     }
 }
 

@@ -104,6 +104,26 @@ class AuthRepo(private val http: Http, private val session: SessionState) {
         }
     }
 
+    /**
+     * POST /api/auth/change-password (auth_routes.py:232) with a JSON body.
+     * Throws ApiException with the server's own text ("Current password is
+     * incorrect", "Password must be at least N characters"). The server ends
+     * every other session of the user but keeps this one, so no new login is
+     * needed. Never retried: a repeat after the first took effect would fail
+     * on the old password.
+     */
+    suspend fun changePassword(current: String, new: String) {
+        val body = JSONObject().put("current_password", current).put("new_password", new)
+        http.call(
+            Request.Builder().url(http.url("/api/auth/change-password")).post(body.toString().toRequestBody(JSON)).build(),
+            retry = false,
+        )
+    }
+
+    /** GET /api/auth/2fa/status: whether the account has two-factor sign-in on. Read only; setting it up stays in the web UI. */
+    suspend fun totpEnabled(): Boolean =
+        parseTotpStatus(http.call(Request.Builder().url(http.url("/api/auth/2fa/status")).build()))
+
     private fun get(origin: HttpUrl, path: String) = Request.Builder().url(origin.resolve(path)!!).build()
 
     companion object {
@@ -118,6 +138,8 @@ class AuthRepo(private val http: Http, private val session: SessionState) {
             val json = JSONObject(body)
             return ServerVersion(json.getString("version"), json.optString("build", ""))
         }
+
+        internal fun parseTotpStatus(body: String): Boolean = JSONObject(body).optBoolean("enabled", false)
 
         internal fun parseStatus(body: String): AuthStatus {
             val json = JSONObject(body)
@@ -141,5 +163,27 @@ class AuthRepo(private val http: Http, private val session: SessionState) {
             e.message == "Setup required" -> SETUP_REQUIRED
             else -> e.message
         }
+    }
+}
+
+/** What the account screen knows about two-factor sign-in. */
+sealed interface AccountState {
+    data object Loading : AccountState
+    data class Known(val enabled: Boolean) : AccountState
+    data class Failed(val message: String) : AccountState
+}
+
+/**
+ * The change-password form's own checks, before the server is asked: all
+ * three fields filled and the new password typed twice the same. Length is
+ * the server's rule (it says "Password must be at least N characters"), so
+ * it is not guessed here.
+ */
+data class ChangePasswordForm(val current: String, val new: String, val again: String) {
+    fun problem(): String? = when {
+        current.isEmpty() -> "Enter your current password"
+        new.isEmpty() -> "Enter a new password"
+        new != again -> "The new passwords do not match"
+        else -> null
     }
 }

@@ -20,11 +20,13 @@ import com.thomaspeoples.wraithodysseus.chat.Preset
 import com.thomaspeoples.wraithodysseus.chat.SkillCommand
 import com.thomaspeoples.wraithodysseus.chat.Slash
 import com.thomaspeoples.wraithodysseus.chat.SlashCommands
+import com.thomaspeoples.wraithodysseus.chat.FirstSend
 import com.thomaspeoples.wraithodysseus.chat.currentModel
 import com.thomaspeoples.wraithodysseus.chat.isCurrentModel
 import com.thomaspeoples.wraithodysseus.chat.label
 import com.thomaspeoples.wraithodysseus.chat.newChat
 import com.thomaspeoples.wraithodysseus.chat.newChatOn
+import com.thomaspeoples.wraithodysseus.chat.pickNewChatModel
 import com.thomaspeoples.wraithodysseus.chat.ChatRequest
 import com.thomaspeoples.wraithodysseus.chat.HistoryMessage
 import com.thomaspeoples.wraithodysseus.chat.ModelChoice
@@ -70,6 +72,12 @@ import org.json.JSONException
  * running background job is asked about (the web polls every 3 s).
  * [canUseBash] is privileges.can_use_bash: without it allow_bash is never
  * sent as true, whatever the Terminal switch says.
+ *
+ * An empty [sessionId] is a new chat that does not exist yet: nothing is
+ * created until the first send, as in the web UI, which only makes the
+ * session once a message goes ([isDraft]). It then makes the chat, and
+ * [openCreated] opens it with the message to send. [startModel] is the
+ * model of the chat "+ New" was pressed in.
  */
 @OptIn(SavedStateHandleSaveableApi::class)
 class ChatViewModel(
@@ -80,7 +88,14 @@ class ChatViewModel(
     private val speech: SpeechOutput? = null,
     private val jobPollMs: Long = 3_000,
     canUseBash: Boolean = false,
+    private val startModel: ModelChoice? = null,
 ) : ViewModel(scope) {
+
+    /** True for a chat not yet created on the server. */
+    val isDraft = sessionId.isEmpty()
+
+    /** The first message of a new chat, held while its history loads so the load cannot wipe the message. */
+    private var pendingFirst: FirstSend? = null
 
     /** Kept current by the screen: the auth status arrives after this ViewModel is built. */
     var canUseBash by mutableStateOf(canUseBash)
@@ -166,6 +181,10 @@ class ChatViewModel(
         private set
     /** Where /new and /fork land; the screen keeps it current. */
     var openChat: (String) -> Unit = {}
+    /** Opens the empty new chat, on the given model if known. */
+    var openNew: (ModelChoice?) -> Unit = {}
+    /** Opens the chat just created, with the message to send into it. */
+    var openCreated: (String, FirstSend) -> Unit = { id, _ -> openChat(id) }
     var draft by saved.saveable("draft", stateSaver = autoSaver()) { mutableStateOf("") }
     var attachments by saved.saveable("attachments", stateSaver = FilesSaver) { mutableStateOf<List<UploadedFile>>(emptyList()) }
         private set
@@ -192,11 +211,25 @@ class ChatViewModel(
     private var probe: Job? = null
 
     init {
-        viewModelScope.launch {
-            reloadHistory()
+        if (isDraft) {
             loading = false
+        } else {
+            viewModelScope.launch {
+                reloadHistory()
+                loading = false
+                pendingFirst?.let {
+                    pendingFirst = null
+                    submit(it.text, it.files)
+                }
+            }
         }
-        viewModelScope.launch { models = runCatching { api.models() }.getOrDefault(emptyList()) }
+        viewModelScope.launch {
+            models = runCatching { api.models() }.getOrDefault(emptyList())
+            // A new chat shows the model it will start on, and sends it.
+            if (isDraft && selected == null) {
+                selected = startModel ?: runCatching { pickNewChatModel(api.defaultChat(), models) }.getOrNull()
+            }
+        }
         if (speech != null) viewModelScope.launch { ttsEnabled = runCatching { api.ttsEnabled() }.getOrDefault(false) }
     }
 
@@ -214,7 +247,7 @@ class ChatViewModel(
      */
     fun onResume() {
         attach()
-        if (resumedOnce && !running && !loading) viewModelScope.launch { refreshTail() }
+        if (resumedOnce && !running && !loading && !isDraft) viewModelScope.launch { refreshTail() }
         resumedOnce = true
         watchJobs()
     }
@@ -233,7 +266,7 @@ class ChatViewModel(
      * a job was seen carries on.
      */
     private fun watchJobs() {
-        if (watch?.isActive == true) return
+        if (isDraft || watch?.isActive == true) return
         watch = viewModelScope.launch {
             var before = emptySet<String>()
             while (true) {
@@ -268,6 +301,7 @@ class ChatViewModel(
      * to. When nothing shown is in the new page it replaces everything.
      */
     private suspend fun refreshTail() = report {
+        if (isDraft) return@report
         val page = api.history(sessionId, null)
         val ids = page.messages.mapNotNull { it.dbId }.toSet()
         val at = messages.indexOfFirst { it.dbId != null && it.dbId in ids }
@@ -286,7 +320,7 @@ class ChatViewModel(
     /** On (re)entering the screen: pick up a run that is still going, e.g.
      * one started before the screen was left or from the web UI. */
     fun attach() {
-        if (running || probe?.isActive == true) return
+        if (isDraft || running || probe?.isActive == true) return
         start(quiet = true) { api.resume(sessionId) }
     }
 
@@ -326,6 +360,10 @@ class ChatViewModel(
         val text = draft.trim()
         val files = attachments
         if (text.isEmpty() && files.isEmpty()) return
+        if (isDraft) {
+            if (!running) createChat(text, files)
+            return
+        }
         if (running) {
             if (queued != null) return
             queued = Queued(text, files)
@@ -336,6 +374,38 @@ class ChatViewModel(
         draft = ""
         attachments = emptyList()
         submit(text, files)
+    }
+
+    /**
+     * The first send of a new chat: only now is the session made, on the
+     * model shown, and the message goes into it. The composer is emptied
+     * once the chat exists, so a failure leaves the text and attachments
+     * where they were. Commands need a chat to act on, so they wait.
+     */
+    private fun createChat(text: String, files: List<UploadedFile>) {
+        val command = if (files.isEmpty() && text.startsWith("/")) SlashCommands.parse(text, emptyList()) else null
+        if (command != null) {
+            say(if (command == Slash.New) "This is already a new chat" else "Commands work once the chat has started")
+            return
+        }
+        act {
+            val m = selected
+            val id = if (m != null) api.newChatOn(m) else api.newChat()
+            if (id == null) {
+                say("No model available")
+            } else {
+                draft = ""
+                attachments = emptyList()
+                openCreated(id, FirstSend(text, files, toggles.takeIf { togglesSet }, m))
+            }
+        }
+    }
+
+    /** The chat made by [createChat] is open: carries its first message out, once its history has loaded. */
+    fun sendFirst(first: FirstSend) {
+        first.toggles?.let { updateToggles(it) }
+        first.model?.let { selected = it }
+        if (loading) pendingFirst = first else submit(first.text, first.files)
     }
 
     /** Takes the waiting message back into the composer, ahead of anything typed since. */
@@ -463,11 +533,11 @@ class ChatViewModel(
 
     fun sessionEndpoint(): String? = sessionEndpointId
 
-    /** A new chat on this chat's model ("+ New" and /new). */
-    fun newChat() = act {
-        val m = currentModel(models, selected, sessionModel, sessionEndpointId)
-        val id = if (m != null) api.newChatOn(m) else api.newChat()
-        if (id == null) say("No model available") else openChat(id)
+    /** A new chat on this chat's model ("+ New" and /new): opened empty, and
+     * only created on the server when its first message is sent. */
+    fun newChat() {
+        if (isDraft) return
+        openNew(currentModel(models, selected, sessionModel, sessionEndpointId))
     }
 
     private fun forkChat() = act {
@@ -550,6 +620,7 @@ class ChatViewModel(
 
     /** The chat's name and mode; a chat that has not been touched starts its switches from the mode. */
     suspend fun loadChatInfo() {
+        if (isDraft) return
         val s = quietly { api.sessions() }?.firstOrNull { it.id == sessionId } ?: return
         if (title == null) title = s.name
         if (!togglesSet) updateToggles(Toggles.forSessionMode(s.mode))
@@ -557,6 +628,7 @@ class ChatViewModel(
 
     /** The whole chat's context use, for the ring: asked on opening and after each run. */
     suspend fun refreshContext() {
+        if (isDraft) return
         quietly { api.context(sessionId) }?.let { context = it }
     }
 
