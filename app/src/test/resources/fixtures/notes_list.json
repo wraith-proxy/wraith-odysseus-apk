@@ -1,0 +1,6 @@
+{"notes":[
+{"id":"n1","owner":"tom","title":"Shopping","content":null,"items":[{"id":"a1","text":"Milk","done":true,"indent":0},{"id":"a2","text":"Eggs","done":false,"indent":1},{"text":"Reply","checked":true}],"note_type":"todo","color":"green","label":"home #errands","pinned":false,"archived":false,"due_date":"2026-10-12T09:30","source":"user","session_id":null,"sort_order":2,"image_url":null,"repeat":"weekly:1","created_at":"2026-10-01T08:00:00","updated_at":"2026-10-08T08:00:00"},
+{"id":"n2","owner":"tom","title":"Idea","content":"Write the thing","items":null,"note_type":"note","color":"","label":null,"pinned":true,"archived":false,"due_date":null,"source":"user","sort_order":5,"repeat":null,"updated_at":"2026-10-02T08:00:00"},
+{"id":"n3","title":"Older","content":"x","note_type":"note","color":"purple","label":"home","pinned":false,"archived":false,"sort_order":2,"updated_at":"2026-10-09T08:00:00"},
+{"id":"n4","title":"Cal","content":"x","note_type":"note","label":"calendar","source":"calendar","sort_order":0,"updated_at":"2026-10-09T08:00:00"}
+]}
