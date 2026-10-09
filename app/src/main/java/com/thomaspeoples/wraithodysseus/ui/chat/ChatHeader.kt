@@ -1,5 +1,7 @@
 package com.thomaspeoples.wraithodysseus.ui.chat
 
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -87,7 +89,9 @@ internal fun ChatHeader(
                 Icon(Lucide.ChevronDown, "Chat options", Modifier.size(18.dp), tint = Muted)
             }
             if (context != null) {
-                IconButton(onClick = onRing) { ContextRing(context.percent) }
+                IconButton(onClick = onRing) {
+                    ContextRing(context.percent, Modifier.semantics { contentDescription = "Chat context, ${context.percent.toInt()} percent" })
+                }
             }
             IconButton(onClick = onMenu) { Icon(Lucide.Menu, "Menu") }
         }

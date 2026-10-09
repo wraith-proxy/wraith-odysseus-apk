@@ -1,5 +1,7 @@
 package com.thomaspeoples.wraithodysseus.ui.sessions
 
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -154,11 +156,13 @@ private fun ChatRow(
                 .combinedClickable(
                     role = Role.Button,
                     onClick = onClick,
+                    onLongClickLabel = "Chat actions",
                     onLongClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         onLongClick()
                     },
                 )
+                .semantics { if (selecting) selected = picked }
                 .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),

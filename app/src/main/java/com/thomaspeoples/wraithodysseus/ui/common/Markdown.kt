@@ -1,5 +1,6 @@
 package com.thomaspeoples.wraithodysseus.ui.common
 
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import android.content.ClipData
@@ -292,7 +293,7 @@ private fun CodeBlock(code: String, onCopy: () -> Unit) {
             softWrap = false,
             modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(start = 8.dp, top = 8.dp, bottom = 8.dp, end = 36.dp),
         )
-        IconButton(onClick = onCopy, modifier = Modifier.align(Alignment.TopEnd).size(32.dp)) {
+        IconButton(onClick = onCopy, modifier = Modifier.align(Alignment.TopEnd).minimumInteractiveComponentSize().size(32.dp)) {
             Icon(Lucide.Copy, contentDescription = "Copy code", tint = Muted, modifier = Modifier.size(16.dp))
         }
     }

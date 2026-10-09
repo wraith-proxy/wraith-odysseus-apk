@@ -1,5 +1,7 @@
 package com.thomaspeoples.wraithodysseus.ui.chat
 
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -155,11 +157,15 @@ private fun Line(label: String, value: String) {
 
 @Composable
 private fun SwitchRow(label: String, on: Boolean, onChange: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+    Row(
+        Modifier.fillMaxWidth().toggleable(value = on, role = Role.Switch, onValueChange = onChange),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
         Column {
             Text(label, style = MaterialTheme.typography.bodyMedium)
             Text(if (on) "On" else "Off", color = Muted, style = MaterialTheme.typography.labelSmall)
         }
-        Switch(checked = on, onCheckedChange = onChange)
+        Switch(checked = on, onCheckedChange = null)
     }
 }

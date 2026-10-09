@@ -90,7 +90,7 @@ internal fun DetailsFooter(details: MessageDetails) {
 private fun Tap(description: String, onClick: () -> Unit, content: @Composable () -> Unit) {
     Row(
         Modifier
-            .heightIn(min = 36.dp)
+            .heightIn(min = 48.dp)
             .clickable(role = Role.Button, onClickLabel = description, onClick = onClick),
         verticalAlignment = Alignment.CenterVertically,
     ) { content() }

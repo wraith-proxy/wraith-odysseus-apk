@@ -49,6 +49,9 @@ internal fun Collapsible(
     trailing: String? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    // The live bubble is swapped for the saved one when a turn ends (different list keys), so an
+    // expanded box folds again at that moment; sharing state across both would need it hoisted
+    // into the turn state. Accepted: the content is unchanged and one tap reopens it.
     var open by rememberSaveable(title) { mutableStateOf(false) }
     Column(
         modifier

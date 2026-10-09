@@ -1,5 +1,7 @@
 package com.thomaspeoples.wraithodysseus.ui.email
 
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import android.content.Context
@@ -184,7 +186,10 @@ internal fun EmailRow(
         if (selecting) {
             Checkbox(checked = selected, onCheckedChange = { onClick() })
         } else {
-            Box(Modifier.size(8.dp).background(if (email.isRead || sent) Color.Transparent else color, CircleShape))
+            Box(
+                Modifier.size(8.dp).background(if (showUnreadDot(email.isRead, email.isAnswered, sent)) color else Color.Transparent, CircleShape)
+                    .semantics { if (showUnreadDot(email.isRead, email.isAnswered, sent)) contentDescription = "Unread" },
+            )
         }
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -209,15 +214,15 @@ internal fun EmailRow(
         }
         if (!selecting) {
             val on = MaterialTheme.colorScheme.primary
-            IconButton(onClick = onFavorite, modifier = Modifier.size(36.dp)) {
+            IconButton(onClick = onFavorite, modifier = Modifier.size(48.dp)) {
                 Icon(Lucide.Bookmark, if (email.isFlagged) "Unfavorite" else "Favorite", tint = if (email.isFlagged) on else Muted, modifier = Modifier.size(18.dp))
             }
             if (!sent) {
-                IconButton(onClick = onDone, modifier = Modifier.size(36.dp)) {
+                IconButton(onClick = onDone, modifier = Modifier.size(48.dp)) {
                     Icon(Lucide.Check, if (email.isAnswered) "Mark not done" else "Mark done", tint = if (email.isAnswered) on else Muted, modifier = Modifier.size(18.dp))
                 }
             }
-            IconButton(onClick = onMore, modifier = Modifier.size(36.dp)) {
+            IconButton(onClick = onMore, modifier = Modifier.size(48.dp)) {
                 Icon(Lucide.EllipsisVertical, "More", tint = Muted, modifier = Modifier.size(18.dp))
             }
         }
@@ -294,3 +299,6 @@ internal fun pickDateTime(context: Context, initial: LocalDateTime, onPick: (Loc
         TimePickerDialog(context, { _, h, min -> onPick(date.atTime(h, min)) }, initial.hour, initial.minute, true).show()
     }
 }
+
+/** The web's rule (emailInbox.js): a dot only for mail that is neither read nor marked done, and never in Sent. */
+internal fun showUnreadDot(isRead: Boolean, isAnswered: Boolean, sent: Boolean): Boolean = !isRead && !isAnswered && !sent

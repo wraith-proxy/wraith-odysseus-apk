@@ -1,5 +1,10 @@
 package com.thomaspeoples.wraithodysseus.ui.chat
 
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -206,7 +211,10 @@ fun Composer(
                 .fillMaxWidth()
                 .clip(InputBarShape)
                 .background(OdyColors.InputBg)
-                .planSwipe(enabled = !running) { onToggles(toggles.togglePlan()) },
+                .planSwipe(enabled = !running) { onToggles(toggles.togglePlan()) }
+                .semantics {
+                    if (!running) customActions = listOf(CustomAccessibilityAction("Toggle plan mode") { onToggles(toggles.togglePlan()); true })
+                },
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = {
@@ -306,7 +314,7 @@ private fun ModeControl(agent: Boolean, enabled: Boolean, onPick: (Boolean) -> U
                 color = if (on) MaterialTheme.colorScheme.primary else Muted,
                 modifier = Modifier
                     .background(if (on) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent)
-                    .clickable(enabled = enabled && !on) { onPick(isAgent) }
+                    .selectable(selected = on, enabled = enabled && !on, role = Role.RadioButton) { onPick(isAgent) }
                     .padding(horizontal = 14.dp, vertical = 7.dp),
             )
         }
