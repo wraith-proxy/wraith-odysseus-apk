@@ -1,0 +1,1 @@
+{"id":"t9","name":"Stretch reminder","prompt":"Remind me to stretch","task_type":"llm","schedule":"daily","scheduled_time":"06:30","trigger_type":"schedule","next_run":"2026-10-10T06:30:00Z","status":"active","output_target":"session","run_count":0,"is_builtin":false}
