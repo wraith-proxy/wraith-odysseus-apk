@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Themed-icon layer: the foreground's body path with the eyes punched out
+<!-- Themed-icon layer: the foreground's sail with the eyes punched out
      (evenOdd), since a monochrome layer is a single alpha mask. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
@@ -8,8 +8,8 @@
     android:viewportHeight="108">
     <path
         android:fillType="evenOdd"
-        android:pathData="M36,52 A18,18 0 0,1 72,52 L72,74 L66,69 L60,74 L54,69 L48,74 L42,69 L36,74 Z
-                          M43.5,52 A3.5,3.5 0 1,0 50.5,52 A3.5,3.5 0 1,0 43.5,52 Z
-                          M57.5,52 A3.5,3.5 0 1,0 64.5,52 A3.5,3.5 0 1,0 57.5,52 Z"
+        android:pathData="M44,24 L74,76 L69,70 L64,76 L59,70 L54,76 L49,70 L44,76 Z
+                          M47,60 A3,3 0 1,0 53,60 A3,3 0 1,0 47,60 Z
+                          M55,60 A3,3 0 1,0 61,60 A3,3 0 1,0 55,60 Z"
         android:fillColor="#FFFFFF" />
 </vector>

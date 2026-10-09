@@ -60,6 +60,8 @@ class HttpTest {
         assertEquals("Too many requests — try again later", Http.errorMessage(429, fixture("login_429.json"), ""))
         assertEquals("Bad Gateway", Http.errorMessage(502, "<html>nginx</html>", "Bad Gateway"))
         assertEquals("HTTP 502", Http.errorMessage(502, null, ""))
+        // The code-plus-message shape, nested in detail.
+        assertEquals("Unstar the session before deleting it", Http.errorMessage(403, fixture("error_403_session_starred.json"), "Forbidden"))
     }
 
     @Test

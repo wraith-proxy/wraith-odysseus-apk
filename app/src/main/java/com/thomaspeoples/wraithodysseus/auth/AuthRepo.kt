@@ -23,7 +23,13 @@ data class AuthStatus(
     val isAdmin: Boolean,
     /** privileges.can_use_bash; false whenever privileges is absent. */
     val canUseBash: Boolean,
-)
+    /** The privileges set to false (can_use_research, can_manage_memory...). */
+    val denied: Set<String> = emptySet(),
+) {
+    /** The web UI hides a control only when its privilege is false, never
+     * when it is absent: admins and older servers send none. */
+    fun allows(privilege: String) = privilege !in denied
+}
 
 sealed interface LoginResult {
     data class Ok(val username: String) : LoginResult
@@ -115,12 +121,15 @@ class AuthRepo(private val http: Http, private val session: SessionState) {
 
         internal fun parseStatus(body: String): AuthStatus {
             val json = JSONObject(body)
+            val privileges = json.optJSONObject("privileges")
             return AuthStatus(
                 configured = json.optBoolean("configured", false),
                 authenticated = json.optBoolean("authenticated", false),
                 username = json.optString("username").takeIf { !json.isNull("username") && it.isNotEmpty() },
                 isAdmin = json.optBoolean("is_admin", false),
-                canUseBash = json.optJSONObject("privileges")?.optBoolean("can_use_bash", false) ?: false,
+                canUseBash = privileges?.optBoolean("can_use_bash", false) ?: false,
+                denied = privileges?.keys()?.asSequence()
+                    ?.filter { it.startsWith("can_") && privileges.opt(it) == false }?.toSet() ?: emptySet(),
             )
         }
 

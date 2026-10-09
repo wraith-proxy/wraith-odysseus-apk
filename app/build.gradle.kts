@@ -80,6 +80,13 @@ android {
     }
 
     buildTypes {
+        // A debug build installs next to the release one ("Wraith Dev"), so
+        // trying a branch on a phone never replaces, or logs out of, the app
+        // in daily use. It never offers the release as an update either.
+        debug {
+            applicationIdSuffix = ".debug"
+            buildConfigField("boolean", "UPDATE_CHECK", "false")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(

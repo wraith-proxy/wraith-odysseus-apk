@@ -43,7 +43,8 @@ private val libraries = listOf(
     "OkHttp" to "Apache-2.0",
     "Kotlin standard library and kotlinx.coroutines" to "Apache-2.0",
     "commonmark-java" to "BSD-2-Clause",
-    "Material icons (including the hand-drawn chat bubble)" to "Apache-2.0",
+    "Material icons" to "Apache-2.0",
+    "Lucide icons (licence text in assets/licenses/Lucide-ISC.txt)" to "ISC",
 )
 
 @OptIn(ExperimentalMaterial3Api::class)

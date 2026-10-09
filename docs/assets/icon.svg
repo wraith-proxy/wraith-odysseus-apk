@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="18 18 72 72" width="512" height="512">
+  <!-- The launcher icon's visible 72dp, from ic_launcher_background.xml and
+       ic_launcher_foreground.xml: the source of the docs favicon and of
+       fastlane's 512px icon.png. -->
+  <rect x="18" y="18" width="72" height="72" fill="#282C34"/>
+  <path d="M44,24 L74,76 L69,70 L64,76 L59,70 L54,76 L49,70 L44,76 Z" fill="#E06C75"/>
+  <circle cx="50" cy="60" r="3" fill="#9CDEF2"/>
+  <circle cx="58" cy="60" r="3" fill="#9CDEF2"/>
+</svg>

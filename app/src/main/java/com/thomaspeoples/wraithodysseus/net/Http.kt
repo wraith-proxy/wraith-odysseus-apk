@@ -124,7 +124,8 @@ class Http(private val session: SessionState) {
          * The server uses several error shapes: route errors put the text in
          * `detail` (a list of field errors on a 422), the auth middleware uses
          * `error`, and a few handlers put a code like SESSION_NOT_FOUND in
-         * `error` with the readable text in `message`.
+         * `error` with the readable text in `message` -- at the top level, or
+         * nested in `detail` (a starred chat refusing deletion).
          */
         internal fun errorMessage(status: Int, body: String?, statusText: String): String {
             val json = body?.let { runCatching { JSONObject(it) }.getOrNull() }
@@ -132,6 +133,7 @@ class Http(private val session: SessionState) {
                 when (val detail = json.opt("detail")) {
                     is String -> if (detail.isNotBlank()) return detail
                     is JSONArray -> return "Invalid request"
+                    is JSONObject -> return errorMessage(status, detail.toString(), statusText)
                 }
                 val error = (json.opt("error") as? String)?.takeIf { it.isNotBlank() }
                 val message = (json.opt("message") as? String)?.takeIf { it.isNotBlank() }

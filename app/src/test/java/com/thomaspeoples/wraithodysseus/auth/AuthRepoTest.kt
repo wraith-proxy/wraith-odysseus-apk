@@ -56,6 +56,12 @@ class AuthRepoTest {
         val user = AuthRepo.parseStatus(fixture("auth_status_authenticated_user.json"))
         assertFalse(user.isAdmin)
         assertFalse(user.canUseBash)
+        // Only can_* keys set to false count; allowed_models_restricted: false
+        // is a setting, not a denial.
+        assertEquals(setOf("can_use_bash"), user.denied)
+        assertTrue(user.allows("can_use_research"))
+        assertFalse(user.allows("can_use_bash"))
+        assertFalse(AuthRepo.parseStatus("""{"privileges": {"can_manage_memory": false}}""").allows("can_manage_memory"))
 
         val anon = AuthRepo.parseStatus(fixture("auth_status_anonymous.json"))
         assertFalse(anon.authenticated)

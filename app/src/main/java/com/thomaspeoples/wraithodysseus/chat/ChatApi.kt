@@ -17,16 +17,24 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** An item of GET /api/sessions (a bare array). */
+/** An item of GET /api/sessions (a bare array). Times are the server's naive
+ * UTC ISO strings; see parseServerTime. */
 data class ChatSession(
     val id: String,
     val name: String,
     val model: String?,
     val endpointId: String?,
-    /** "chat", "agent", "research_pending" or null. */
+    /** "chat", "agent", "research", "research_pending" or null. */
     val mode: String?,
     val isImportant: Boolean,
     val updatedAt: String,
+    /** The server already falls back to updated_at, then created_at. */
+    val lastMessageAt: String = updatedAt,
+    val createdAt: String = "",
+    val folder: String? = null,
+    val messageCount: Int = 0,
+    val hasDocuments: Boolean = false,
+    val hasImages: Boolean = false,
 )
 
 data class HistoryMessage(
@@ -96,6 +104,7 @@ class ChatApi(private val http: Http) {
         val arr = JSONArray(http.call(get("/api/sessions")))
         return (0 until arr.length()).map { i ->
             val o = arr.getJSONObject(i)
+            val updatedAt = o.str("updated_at").orEmpty()
             ChatSession(
                 id = o.getString("id"),
                 name = o.str("name").orEmpty(),
@@ -103,7 +112,13 @@ class ChatApi(private val http: Http) {
                 endpointId = o.str("endpoint_id"),
                 mode = o.str("mode"),
                 isImportant = o.optBoolean("is_important", false),
-                updatedAt = o.str("updated_at").orEmpty(),
+                updatedAt = updatedAt,
+                lastMessageAt = o.str("last_message_at") ?: updatedAt,
+                createdAt = o.str("created_at").orEmpty(),
+                folder = o.str("folder")?.ifBlank { null },
+                messageCount = o.optInt("message_count", 0),
+                hasDocuments = o.optBoolean("has_documents", false),
+                hasImages = o.optBoolean("has_images", false),
             )
         }
     }

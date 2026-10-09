@@ -116,6 +116,11 @@ class ChatApiTest {
         assertEquals("qwen3-30b-a3b", pickNewChatModel(DefaultChat("", ""), models)?.model)
         assertNull(pickNewChatModel(DefaultChat("", ""), emptyList()))
         assertEquals("qwen3-30b-a3b 9:41:07 AM", newChatName("org/qwen3-30b-a3b", "9:41:07 AM"))
+        // Whatever the phone's locale, the time must keep the one shape the
+        // server auto-titles (routes/chat_helpers.py's name pattern).
+        val name = newChatName("qwen3-30b-a3b", newChatTime(java.time.LocalTime.of(9, 5, 7)))
+        assertEquals("qwen3-30b-a3b 9:05:07", name)
+        assertTrue(Regex("""^.+ \d{1,2}:\d{2}:\d{2}(\s*(AM|PM))?$""").matches(name))
     }
 
     // -- run control -------------------------------------------------------
@@ -199,6 +204,9 @@ class ChatApiTest {
         assertEquals(2, sessions.size)
         assertTrue(sessions[0].isImportant)
         assertNull(sessions[1].endpointId)
+        assertEquals("2026-10-07T18:02:10.500000", sessions[0].lastMessageAt)
+        assertEquals(14, sessions[0].messageCount)
+        assertNull(sessions[0].folder)
 
         val hits = api.search("cat")
         assertEquals("7d3c2f0e-1111-4a2b-9c3d-000000000001", hits.single().sessionId)

@@ -21,15 +21,25 @@ need to happen in.
 - [ ] Owner steps: repo public, keystore minted, secrets set.
 - [ ] Device checklist on a real phone, then 1.0.0.
 
-## Later
+## 0.2.0 to 0.6.0: the web UI, on the phone
 
-- Email "All" view, HTML rendering, archive/flag/delete, folders, compose
-  attachments, AI summary and reply.
-- Calendar, notes and tasks.
-- A per-session "running" dot and an unread badge.
-- After Mark unread, put the message back in the inbox list without a manual
-  refresh.
-- Toggles that start from the session's own mode, instead of all off.
+One release at a time, each tried on a phone before it ships. Everything
+uses the server's existing API; nothing here needs a server change.
+
+- [ ] 0.2.0: the web UI's sidebar as a drawer from the right, in place of the
+      tabs; hold a message for its actions (copy, edit, resend, regenerate,
+      fork, rewrite, delete); AI reply in email; the ghost-sail icon.
+- [ ] 0.3.0: chats as rich as the web: sources, tool cards, timings, the
+      context ring, reply variants, tables, the full composer and header.
+- [ ] 0.4.0: the chat list: hold a chat to rename, favourite, copy, move to a
+      folder, archive or delete; folders, date groups, select, archived chats.
+- [ ] 0.5.0: email as the web has it: accounts, folders, filters, search,
+      HTML with images on request, attachments, reply all, forward, translate,
+      schedule send.
+- [ ] 0.6.0: the tools: notes, calendar, memory and skills, deep research,
+      tasks, gallery, library, theme.
+
+Compare and Cookbook stay in the web UI; their drawer rows open it.
 
 ## F-Droid
 
@@ -44,6 +54,5 @@ Deferred until an fdroiddata merge request:
   `generatedDensities()`, `vcsInfo` off, and the ArtProfile task disabled.
 - `AllowedAPKSigningKeys`, a literal versionCode for `checkupdates`, and
   per-versionCode changelogs.
-- The fastlane 512px `icon.png` (F-Droid falls back to the APK icon).
 - An F-Droid-signed build cannot replace an Obtainium install without an
   uninstall. That will be documented in the listing.
