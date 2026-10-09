@@ -33,3 +33,7 @@ suspend fun ChatApi.newChat(now: LocalTime = LocalTime.now()): String? {
     val model = pickNewChatModel(defaultChat(), models()) ?: return null
     return createSession(newChatName(model.model, newChatTime(now)), model.endpointId, model.model)
 }
+
+/** Creates a chat on [model], the one the open chat is on: "+ New" and /new. */
+suspend fun ChatApi.newChatOn(model: ModelChoice, now: LocalTime = LocalTime.now()): String =
+    createSession(newChatName(model.model, newChatTime(now)), model.endpointId, model.model)

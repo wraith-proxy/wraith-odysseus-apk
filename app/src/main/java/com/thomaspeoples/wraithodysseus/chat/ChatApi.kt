@@ -10,6 +10,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
+import okhttp3.FormBody
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
@@ -67,11 +68,26 @@ data class HistoryPage(
     val hasMoreBefore: Boolean,
     val model: String?,
     val endpointId: String?,
+    /** The chat's name, which the history route also reports. */
+    val name: String? = null,
 )
 
-/** A model is the pair (endpoint, model id): the same id can be served by
- * several endpoints. */
-data class ModelChoice(val endpointId: String, val endpointName: String, val model: String, val display: String)
+/**
+ * A model is the pair (endpoint, model id): the same id can be served by
+ * several endpoints. [url] is the endpoint's chat URL (switching a chat's
+ * model names it, see [ChatApi.setModel]); [category] is "local" for the
+ * user's own servers; [reasoningLevels] are the efforts the model accepts
+ * (models_metadata.supported_reasoning_levels), empty for most.
+ */
+data class ModelChoice(
+    val endpointId: String,
+    val endpointName: String,
+    val model: String,
+    val display: String,
+    val url: String = "",
+    val category: String = "",
+    val reasoningLevels: List<String> = emptyList(),
+)
 
 /** GET /api/default-chat. Either field can be "" (no usable endpoint). */
 data class DefaultChat(val endpointId: String, val model: String)
@@ -89,6 +105,10 @@ data class ChatRequest(
     val selected: ModelChoice?,
     val attachmentIds: List<String>,
     val approval: ToolApproval?,
+    /** privileges.can_use_bash: allow_bash is only ever true for those who have it. */
+    val canBash: Boolean = true,
+    /** The chat's reasoning effort (thinking_mode "effort:x"), if one is set. */
+    val reasoningEffort: String? = null,
 )
 
 /** A live run. [runId] (X-Odysseus-Run-Id) is what stop needs; it is null on
@@ -360,6 +380,99 @@ class ChatApi(private val http: Http) {
         }
     }
 
+    // -- the chat itself -----------------------------------------------------
+
+    /**
+     * PATCH /api/session/{sid} with the model switch (session_routes.py:660,
+     * form fields model, endpoint_url, endpoint_id). The server needs
+     * endpoint_url present, though with a registered endpoint_id it rebuilds
+     * the URL itself; non-admins must name a registered endpoint.
+     */
+    suspend fun setModel(sessionId: String, m: ModelChoice) {
+        val body = FormBody.Builder()
+            .add("model", m.model)
+            .add("endpoint_url", m.url)
+            .apply { if (m.endpointId.isNotBlank()) add("endpoint_id", m.endpointId) }
+            .build()
+        http.call(Request.Builder().url(http.url("/api/session/${seg(sessionId)}")).patch(body).build())
+    }
+
+    /** PATCH /api/session/{sid} with name=. Setting the same name twice is harmless. */
+    suspend fun renameSession(sessionId: String, name: String) {
+        require(name.isNotBlank()) { "name" }
+        val body = FormBody.Builder().add("name", name).build()
+        http.call(Request.Builder().url(http.url("/api/session/${seg(sessionId)}")).patch(body).build())
+    }
+
+    /** DELETE /api/session/{sid} (session_routes.py:849). A starred chat is refused with 403 and the server's own message. */
+    suspend fun deleteSession(sessionId: String) {
+        http.call(Request.Builder().url(http.url("/api/session/${seg(sessionId)}")).delete().build(), retry = false)
+    }
+
+    /** POST /api/session/{sid}/archive (session_routes.py:942). */
+    suspend fun archiveSession(sessionId: String) {
+        http.call(post("/api/session/${seg(sessionId)}/archive", ByteArray(0).toRequestBody()), retry = false)
+    }
+
+    /** GET /api/session/{sid}/context: the ring and the Chat Context panel. */
+    suspend fun context(sessionId: String): ChatContext =
+        parseContext(JSONObject(http.call(get("/api/session/${seg(sessionId)}/context"))))
+
+    /**
+     * POST /api/session/{sid}/compact (history_routes.py:1093). Returns the
+     * server's own message: "Compacted: 12 msgs -> 6 msgs (80% -> 20%)", or
+     * "Not enough messages to compact" (a 200, for a chat under 6 messages).
+     * A chat with a run going is refused with 409 and a message. It makes a
+     * model call, so it waits as long as a stream may and is never retried.
+     */
+    suspend fun compact(sessionId: String): String {
+        val body = JSONObject().toString().toRequestBody("application/json".toMediaType())
+        val o = JSONObject(http.call(post("/api/session/${seg(sessionId)}/compact", body), Http.STREAM_TIMEOUT_S, retry = false))
+        return o.str("message") ?: "Compacted"
+    }
+
+    /** POST /api/session/{sid}/memory-extraction, memory-injection or skill-injection: {"enabled"}. */
+    suspend fun setSwitch(sessionId: String, which: ChatSwitch, enabled: Boolean) {
+        val body = JSONObject().put("enabled", enabled)
+        http.call(post("/api/session/${seg(sessionId)}/${which.path}", jsonBody(body)))
+    }
+
+    /**
+     * POST /api/session/{sid}/generation-settings (history_routes.py:1023).
+     * The web always sends all three; a null override clears it. A
+     * [reasoningEffort] ("default" clears) wins over [thinkingMode] on the server.
+     */
+    suspend fun setGeneration(
+        sessionId: String,
+        thinkingMode: String,
+        temperature: Double?,
+        maxTokens: Int?,
+        reasoningEffort: String? = null,
+    ): GenerationSettings {
+        val body = JSONObject()
+            .put("thinking_mode", thinkingMode)
+            .put("temperature_override", temperature ?: JSONObject.NULL)
+            .put("max_tokens_override", maxTokens ?: JSONObject.NULL)
+        reasoningEffort?.let { body.put("reasoning_effort", it) }
+        return parseGeneration(JSONObject(http.call(post("/api/session/${seg(sessionId)}/generation-settings", jsonBody(body)))))
+    }
+
+    /** GET /api/presets: the prompt presets, for the composer's preset_id. */
+    suspend fun presets(): List<Preset> = parsePresets(JSONObject(http.call(get("/api/presets"))))
+
+    /** GET /api/skills/slash-catalog: skills that can be run as slash commands. */
+    suspend fun skillCommands(): List<SkillCommand> = parseSkills(JSONObject(http.call(get("/api/skills/slash-catalog"))))
+
+    /**
+     * POST /api/skills/{name}/invoke (skills_routes.py:1928): the skill-pinned
+     * prompt, which the web then sends as an ordinary message. 404 for a name
+     * that is not an invokable skill.
+     */
+    suspend fun invokeSkill(name: String, request: String): String {
+        val body = JSONObject().put("request", request)
+        return JSONObject(http.call(post("/api/skills/${seg(name)}/invoke", jsonBody(body)), retry = false)).getString("message")
+    }
+
     private suspend fun stream(request: Request, retry: Boolean = true): RunStream {
         val response = http.open(request, Http.STREAM_TIMEOUT_S, retry)
         return RunStream(response.header(RUN_ID), response.sseFrames().map(SseParser::decode))
@@ -387,8 +500,9 @@ class ChatApi(private val http: Http) {
          * The chat_stream form, as the web client sends it. allow_bash is
          * always present: the server only disables bash when the field is
          * there and not "true", so leaving it out would hand an admin's agent
-         * bash regardless of the toggle. plan_mode is always "false" -- an
-         * approval re-POST with it true gets a 409.
+         * bash regardless of the toggle, and it is true only for an agent
+         * turn whose user may use bash. Plan mode makes the turn an agent turn
+         * (chat.js:2551) and is never sent with an approval re-POST.
          */
         internal fun formFields(r: ChatRequest): List<Pair<String, String>> = buildList {
             val t = r.toggles
@@ -396,11 +510,16 @@ class ChatApi(private val http: Http) {
             add("message" to r.message)
             add("session" to r.sessionId)
             add("mode" to if (agent) "agent" else "chat")
-            add("plan_mode" to "false")
+            // An approval re-POST with plan_mode true gets a 409.
+            add("plan_mode" to (t.planMode && r.approval == null).toString())
             if (agent) add("allow_web_search" to t.web.toString())
             else if (t.web) add("use_web" to "true")
             if (t.research) add("use_research" to "true")
-            add("allow_bash" to t.terminal.toString())
+            add("allow_bash" to (agent && t.terminal && r.canBash).toString())
+            // The web sends use_rag=false whenever its RAG switch is off, which is its default.
+            if (!t.rag) add("use_rag" to "false")
+            t.preset?.takeIf { it.isNotBlank() }?.let { add("preset_id" to it) }
+            r.reasoningEffort?.let { add("reasoning_effort" to it) }
             r.selected?.let {
                 add("selected_model" to it.model)
                 add("selected_endpoint_id" to it.endpointId)
@@ -447,18 +566,32 @@ class ChatApi(private val http: Http) {
                 .flatMap { item ->
                     val endpointId = item.str("endpoint_id") ?: return@flatMap emptyList()
                     val endpointName = item.str("endpoint_name") ?: endpointId
+                    val url = item.str("url").orEmpty()
+                    val category = item.str("category").orEmpty()
+                    val metadata = item.optJSONObject("models_metadata")
                     fun pairs(ids: String, names: String): List<ModelChoice> {
                         val idArr = item.optJSONArray(ids) ?: return emptyList()
                         val nameArr = item.optJSONArray(names)
                         return (0 until idArr.length()).map { i ->
                             val id = idArr.getString(i)
-                            ModelChoice(endpointId, endpointName, id, nameArr?.optString(i)?.ifBlank { null } ?: id)
+                            ModelChoice(
+                                endpointId, endpointName, id, nameArr?.optString(i)?.ifBlank { null } ?: id,
+                                url, category, reasoningLevels(metadata?.optJSONObject(id)),
+                            )
                         }
                     }
                     (pairs("models", "models_display") + pairs("models_extra", "models_extra_display"))
                         .filter { m -> NON_CHAT.none { m.model.lowercase().contains(it) } }
                         .distinctBy { it.model }
                 }
+        }
+
+        /** supported_reasoning_levels: strings, or objects with an `effort` (modelPicker.js:1077). */
+        private fun reasoningLevels(meta: JSONObject?): List<String> {
+            val arr = meta?.optJSONArray("supported_reasoning_levels") ?: return emptyList()
+            return (0 until arr.length()).mapNotNull { i ->
+                (arr.opt(i) as? String ?: (arr.opt(i) as? JSONObject)?.str("effort"))?.trim()?.lowercase()?.ifEmpty { null }
+            }
         }
 
         internal fun parseHistory(o: JSONObject): HistoryPage {
@@ -516,6 +649,7 @@ class ChatApi(private val http: Http) {
                 hasMoreBefore = o.optBoolean("has_more_before", false),
                 model = o.str("model"),
                 endpointId = o.str("endpoint_id"),
+                name = o.str("name"),
             )
         }
 

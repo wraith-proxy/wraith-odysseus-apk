@@ -13,6 +13,18 @@ import androidx.lifecycle.viewmodel.compose.saveable
 import com.thomaspeoples.wraithodysseus.chat.AskOption
 import com.thomaspeoples.wraithodysseus.chat.AskUser
 import com.thomaspeoples.wraithodysseus.chat.ChatApi
+import com.thomaspeoples.wraithodysseus.chat.ChatContext
+import com.thomaspeoples.wraithodysseus.chat.ChatSwitch
+import com.thomaspeoples.wraithodysseus.chat.GenerationSettings
+import com.thomaspeoples.wraithodysseus.chat.Preset
+import com.thomaspeoples.wraithodysseus.chat.SkillCommand
+import com.thomaspeoples.wraithodysseus.chat.Slash
+import com.thomaspeoples.wraithodysseus.chat.SlashCommands
+import com.thomaspeoples.wraithodysseus.chat.currentModel
+import com.thomaspeoples.wraithodysseus.chat.isCurrentModel
+import com.thomaspeoples.wraithodysseus.chat.label
+import com.thomaspeoples.wraithodysseus.chat.newChat
+import com.thomaspeoples.wraithodysseus.chat.newChatOn
 import com.thomaspeoples.wraithodysseus.chat.ChatRequest
 import com.thomaspeoples.wraithodysseus.chat.HistoryMessage
 import com.thomaspeoples.wraithodysseus.chat.ModelChoice
@@ -56,6 +68,8 @@ import org.json.JSONException
  * coroutines without a main looper. [speech] plays read-aloud audio; without
  * one the Read aloud action is never offered. [jobPollMs] is how often a
  * running background job is asked about (the web polls every 3 s).
+ * [canUseBash] is privileges.can_use_bash: without it allow_bash is never
+ * sent as true, whatever the Terminal switch says.
  */
 @OptIn(SavedStateHandleSaveableApi::class)
 class ChatViewModel(
@@ -65,7 +79,11 @@ class ChatViewModel(
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
     private val speech: SpeechOutput? = null,
     private val jobPollMs: Long = 3_000,
+    canUseBash: Boolean = false,
 ) : ViewModel(scope) {
+
+    /** Kept current by the screen: the auth status arrives after this ViewModel is built. */
+    var canUseBash by mutableStateOf(canUseBash)
 
     var messages by mutableStateOf<List<HistoryMessage>>(emptyList())
         private set
@@ -108,6 +126,46 @@ class ChatViewModel(
     var selected by saved.saveable("selected", stateSaver = ModelSaver) { mutableStateOf<ModelChoice?>(null) }
 
     var toggles by saved.saveable("toggles", stateSaver = TogglesSaver) { mutableStateOf(Toggles()) }
+        private set
+
+    /** True once the switches were taken from the session's mode or changed by the user; a later load must not undo that. */
+    private var togglesSet by saved.saveable("togglesSet") { mutableStateOf(false) }
+
+    fun updateToggles(t: Toggles) {
+        toggles = t
+        togglesSet = true
+    }
+
+    /** The chat's name and mode, as the chat list has them. */
+    var title by mutableStateOf<String?>(null)
+        private set
+    /** The model's endpoint as history reports it: with [sessionModel] it names the chat's model. */
+    private var sessionEndpointId: String? = null
+
+    /** The ring and the Chat Context sheet; null until [refreshContext] has an answer. */
+    var context by mutableStateOf<ChatContext?>(null)
+        private set
+
+    /** Prompt presets for the composer's "^" menu, null until asked for. */
+    var presets by mutableStateOf<List<Preset>?>(null)
+        private set
+    /** Skills that can be run as /commands, null until a "/" is typed. */
+    var skills by mutableStateOf<List<SkillCommand>?>(null)
+        private set
+
+    /** One message typed while a reply streams; it is sent when the reply ends. */
+    var queued by mutableStateOf<Queued?>(null)
+        private set
+
+    /** Dialogs the screen shows: set by slash commands and the header menu. */
+    var confirmDelete by mutableStateOf(false)
+    var renaming by mutableStateOf(false)
+    var helpText by mutableStateOf<String?>(null)
+    /** Set once the chat is deleted or archived: there is nothing left to type into. */
+    var closed by mutableStateOf<String?>(null)
+        private set
+    /** Where /new and /fork land; the screen keeps it current. */
+    var openChat: (String) -> Unit = {}
     var draft by saved.saveable("draft", stateSaver = autoSaver()) { mutableStateOf("") }
     var attachments by saved.saveable("attachments", stateSaver = FilesSaver) { mutableStateOf<List<UploadedFile>>(emptyList()) }
         private set
@@ -221,6 +279,8 @@ class ChatViewModel(
             messages = messages.take(at) + page.messages
         }
         sessionModel = page.model
+        sessionEndpointId = page.endpointId
+        page.name?.let { title = it }
     }
 
     /** On (re)entering the screen: pick up a run that is still going, e.g.
@@ -254,24 +314,336 @@ class ChatViewModel(
         }
     }
 
+    /** A message waiting for the running reply to end. */
+    data class Queued(val text: String, val files: List<UploadedFile>)
+
+    /**
+     * The big button's ↑. While a reply streams (or another action runs) one
+     * message may wait: it is sent when that ends, and [cancelQueued] takes
+     * it back. A second send while one waits is ignored.
+     */
     fun send() {
         val text = draft.trim()
-        if (running || (text.isEmpty() && attachments.isEmpty())) return
-        val sent = attachments
-        // Sending a normal message retires any pending approval server-side.
-        ask = null
-        val bubble = HistoryMessage("user", text, null, null, sent)
-        messages = messages + bubble
+        val files = attachments
+        if (text.isEmpty() && files.isEmpty()) return
+        if (running) {
+            if (queued != null) return
+            queued = Queued(text, files)
+            draft = ""
+            attachments = emptyList()
+            return
+        }
         draft = ""
         attachments = emptyList()
+        submit(text, files)
+    }
+
+    /** Takes the waiting message back into the composer, ahead of anything typed since. */
+    fun cancelQueued() {
+        val q = queued ?: return
+        queued = null
+        draft = if (draft.isBlank()) q.text else q.text + "\n" + draft
+        attachments = q.files + attachments
+    }
+
+    /** Sends the waiting message, if any, now that the chat is free. A run
+     * that failed gives it back to the composer instead, after the message
+     * that failed (which the failure has just put back): the user has not
+     * seen the reply it was meant to follow. */
+    private fun drainQueue(failed: Boolean) {
+        val q = queued ?: return
+        // An approval or question is waiting: a new turn would retire it unseen.
+        if (ask != null && !failed) return
+        queued = null
+        if (failed) {
+            draft = if (draft.isBlank()) q.text else draft + "\n" + q.text
+            attachments = attachments + q.files
+            return
+        }
+        submit(q.text, q.files)
+    }
+
+    private fun submit(text: String, files: List<UploadedFile>) {
+        if (files.isEmpty() && text.startsWith("/")) {
+            val known = skills
+            val cmd = SlashCommands.parse(text, known.orEmpty().map { it.name })
+            if (cmd == null && known == null) {
+                // A skill command is only known once the catalog is: ask, then decide.
+                running = true
+                viewModelScope.launch {
+                    loadSkills()
+                    running = false
+                    val again = SlashCommands.parse(text, skills.orEmpty().map { it.name })
+                    if (again != null) runSlash(again, text) else dispatch(text, files)
+                    drainQueue(failed = false)
+                }
+                return
+            }
+            if (cmd != null) {
+                runSlash(cmd, text)
+                return
+            }
+        }
+        dispatch(text, files)
+    }
+
+    /** A plain message to the model. */
+    private fun dispatch(text: String, files: List<UploadedFile>) {
+        // Sending a normal message retires any pending approval server-side.
+        ask = null
+        val bubble = HistoryMessage("user", text, null, null, files)
+        messages = messages + bubble
         // Refused before the stream opened (quota, model, a dropped
         // connection): the server saved nothing, so the message goes back
         // into the composer instead of vanishing with a reload.
         start(rejected = {
             messages = messages - bubble
             if (draft.isBlank()) draft = text
-            attachments = sent + attachments
-        }) { api.chatStream(request(text, sent.map { it.id }, null)) }
+            attachments = files + attachments
+        }) { api.chatStream(request(text, files.map { it.id }, null)) }
+    }
+
+    // -- slash commands ------------------------------------------------------
+
+    /** Typing "/" is what asks for the skills: most chats never need them. */
+    fun noteDraft(text: String) {
+        if (text.startsWith("/") && skills == null) viewModelScope.launch { loadSkills() }
+    }
+
+    private suspend fun loadSkills() {
+        if (skills != null) return
+        skills = quietly { api.skillCommands() } ?: emptyList()
+    }
+
+    /** The suggestion list for what is typed, from the commands and skills. */
+    fun suggestions(): List<com.thomaspeoples.wraithodysseus.chat.SlashSuggestion> =
+        SlashCommands.suggest(draft, skills.orEmpty())
+
+    /** Every command here is handled on the phone; none reaches the model. */
+    private fun runSlash(cmd: Slash, raw: String) {
+        when (cmd) {
+            Slash.New -> newChat()
+            is Slash.Rename -> if (cmd.name.isBlank()) renaming = true else rename(cmd.name)
+            Slash.Fork -> forkChat()
+            Slash.Delete -> confirmDelete = true
+            Slash.Archive -> archive()
+            Slash.Compact -> compact()
+            is Slash.Model -> modelCommand(cmd.query)
+            Slash.Help -> helpText = SlashCommands.helpText(skills.orEmpty())
+            is Slash.Skill -> runSkill(cmd, raw)
+        }
+    }
+
+    /** The skill's prompt, built by the server, goes out as an ordinary message (slashCommands.js:373). */
+    private fun runSkill(cmd: Slash.Skill, raw: String) {
+        ask = null
+        start(rejected = { if (draft.isBlank()) draft = raw }) {
+            val prompt = try {
+                api.invokeSkill(cmd.name, cmd.request)
+            } catch (e: ApiException) {
+                notice(e)
+                if (draft.isBlank()) draft = raw
+                return@start null
+            } catch (e: IOException) {
+                notice(e)
+                if (draft.isBlank()) draft = raw
+                return@start null
+            } catch (e: JSONException) {
+                notice(e)
+                if (draft.isBlank()) draft = raw
+                return@start null
+            }
+            messages = messages + HistoryMessage("user", prompt, null, null, emptyList())
+            api.chatStream(request(prompt, emptyList(), null))
+        }
+    }
+
+    /** The chat's model as the picker lists it, or null while the list is not known. */
+    fun currentChoice(): ModelChoice? = selected ?: models.firstOrNull { isCurrentModel(it, sessionModel, sessionEndpointId) }
+
+    fun sessionEndpoint(): String? = sessionEndpointId
+
+    /** A new chat on this chat's model ("+ New" and /new). */
+    fun newChat() = act {
+        val m = currentModel(models, selected, sessionModel, sessionEndpointId)
+        val id = if (m != null) api.newChatOn(m) else api.newChat()
+        if (id == null) say("No model available") else openChat(id)
+    }
+
+    private fun forkChat() = act {
+        // Everything: the whole chat, whatever hidden rows it holds.
+        val forked = api.fork(sessionId, Int.MAX_VALUE)
+        say("Forked: ${forked.name}")
+        openChat(forked.id)
+    }
+
+    fun rename(name: String) {
+        val clean = name.trim()
+        if (clean.isEmpty()) return
+        act {
+            api.renameSession(sessionId, clean)
+            title = clean
+            say("Renamed")
+        }
+    }
+
+    fun deleteChat() = act {
+        api.deleteSession(sessionId)
+        closed = "Chat deleted"
+    }
+
+    private fun archive() = act {
+        api.archiveSession(sessionId)
+        closed = "Chat archived"
+    }
+
+    /**
+     * Compact older messages into a summary. The server refuses while a run
+     * is active (409) and answers a short chat with a message instead of an
+     * error; either way its words are shown.
+     */
+    fun compact() {
+        if (running) {
+            say("Wait for the reply to finish before compacting")
+            return
+        }
+        act {
+            say(api.compact(sessionId))
+            reloadHistory()
+            refreshContext()
+        }
+    }
+
+    private fun modelCommand(query: String) {
+        if (query.isBlank()) {
+            say(currentChoice()?.label ?: sessionModel ?: "No model")
+            return
+        }
+        val q = query.trim().lowercase()
+        val matches = models.filter { it.label.lowercase().contains(q) || it.model.lowercase().contains(q) }
+        val exact = matches.filter { it.model.lowercase() == q || it.label.lowercase() == q }
+        when {
+            exact.size == 1 -> switchModel(exact.first())
+            matches.size == 1 -> switchModel(matches.first())
+            matches.isEmpty() -> say("No model matches \"$query\"")
+            else -> say("${matches.size} models match; pick one from the header")
+        }
+    }
+
+    /**
+     * The header's model picker: PATCHes the chat's model (the web does,
+     * modelPicker.js:732) and keeps sending it as the pick for the next turn.
+     */
+    fun switchModel(m: ModelChoice) {
+        if (running) return
+        act {
+            api.setModel(sessionId, m)
+            selected = m
+            sessionModel = m.model
+            sessionEndpointId = m.endpointId
+            say("Using ${m.label}")
+            refreshContext()
+        }
+    }
+
+    // -- header, ring and Chat Context --------------------------------------
+
+    /** The chat's name and mode; a chat that has not been touched starts its switches from the mode. */
+    suspend fun loadChatInfo() {
+        val s = quietly { api.sessions() }?.firstOrNull { it.id == sessionId } ?: return
+        if (title == null) title = s.name
+        if (!togglesSet) updateToggles(Toggles.forSessionMode(s.mode))
+    }
+
+    /** The whole chat's context use, for the ring: asked on opening and after each run. */
+    suspend fun refreshContext() {
+        quietly { api.context(sessionId) }?.let { context = it }
+    }
+
+    suspend fun loadPresets() {
+        if (presets != null) return
+        presets = quietly { api.presets() } ?: return
+    }
+
+    /** One of the three per-chat switches; shown at once, put back if refused. */
+    fun setSwitch(which: ChatSwitch, enabled: Boolean) {
+        val before = context ?: return
+        context = when (which) {
+            ChatSwitch.MemoryExtraction -> before.copy(memoryExtraction = enabled)
+            ChatSwitch.MemoryInjection -> before.copy(memoryInjection = enabled)
+            ChatSwitch.SkillInjection -> before.copy(skillInjection = enabled)
+        }
+        viewModelScope.launch {
+            try {
+                api.setSwitch(sessionId, which, enabled)
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                context = context?.let { now ->
+                    when (which) {
+                        ChatSwitch.MemoryExtraction -> now.copy(memoryExtraction = before.memoryExtraction)
+                        ChatSwitch.MemoryInjection -> now.copy(memoryInjection = before.memoryInjection)
+                        ChatSwitch.SkillInjection -> now.copy(skillInjection = before.skillInjection)
+                    }
+                }
+                notice(e)
+            }
+        }
+    }
+
+    /**
+     * Thinking, reasoning effort, temperature and max tokens, sent together as
+     * the web does (chat.js:760). [change] is the new value for the one that
+     * moved; null overrides clear. [effort] "default" clears an effort.
+     */
+    fun saveGeneration(thinkingMode: String, temperature: Double?, maxTokens: Int?, effort: String? = null) {
+        viewModelScope.launch {
+            try {
+                val saved: GenerationSettings = api.setGeneration(sessionId, thinkingMode, temperature, maxTokens, effort)
+                context = context?.copy(
+                    thinkingMode = saved.thinkingMode,
+                    temperatureOverride = saved.temperatureOverride,
+                    maxTokensOverride = saved.maxTokensOverride,
+                )
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                notice(e)
+                refreshContext()
+            }
+        }
+    }
+
+    /** The whole chat as text for the clipboard, every page of it; null if it could not be read. */
+    suspend fun transcript(): String? {
+        val rows = mutableListOf<HistoryMessage>()
+        var from = 0
+        try {
+            while (true) {
+                val page = api.history(sessionId, from, ChatApi.MAX_WINDOW)
+                rows += page.messages
+                from += ChatApi.MAX_WINDOW
+                if (from >= page.total) break
+            }
+        } catch (e: ApiException) {
+            notice(e)
+            return null
+        } catch (e: IOException) {
+            notice(e)
+            return null
+        } catch (e: JSONException) {
+            notice(e)
+            return null
+        }
+        return rows.joinToString("\n\n") { (if (it.role == "user") "You" else "Assistant") + ": " + it.content }
+    }
+
+    private suspend fun <T> quietly(block: suspend () -> T): T? = try {
+        block()
+    } catch (_: ApiException) {
+        null
+    } catch (_: IOException) {
+        null
+    } catch (_: JSONException) {
+        null
     }
 
     // -- message actions ---------------------------------------------------
@@ -573,6 +945,7 @@ class ChatViewModel(
             } finally {
                 running = false
             }
+            drainQueue(failed = false)
         }
     }
 
@@ -641,6 +1014,8 @@ class ChatViewModel(
         selected = selected,
         attachmentIds = ids,
         approval = approval,
+        canBash = canUseBash,
+        reasoningEffort = context?.reasoningEffort,
     )
 
     /** [rejected], if given, runs instead of the history reload when [open]
@@ -703,7 +1078,10 @@ class ChatViewModel(
             // A turn may have started a background job (research) whose reply
             // arrives with no stream; the web polls from then on too. A no-op
             // while a watch runs, and it ends itself when no job is active.
-            if (end != null) watchJobs()
+            if (end != null) {
+                watchJobs()
+                drainQueue(failed = end is RunEnd.Failed)
+            }
         }
         if (quiet) probe = job
     }
@@ -715,6 +1093,8 @@ class ChatViewModel(
         offset = page.offset
         hasOlder = page.hasMoreBefore
         sessionModel = page.model
+        sessionEndpointId = page.endpointId
+        page.name?.let { title = it }
     }
 
     private suspend fun report(block: suspend () -> Unit) {
@@ -739,13 +1119,28 @@ class ChatViewModel(
         const val CONTINUED = "\n\n*(continued)*\n\n"
 
         // Flat lists of strings and booleans: all a saved-state Bundle holds.
-        val TogglesSaver = listSaver<Toggles, Boolean>(
-            save = { listOf(it.agent, it.web, it.terminal, it.research) },
-            restore = { Toggles(it[0], it[1], it[2], it[3]) },
+        val TogglesSaver = listSaver<Toggles, Any>(
+            save = { listOf(it.agent, it.web, it.terminal, it.research, it.plan, it.rag, it.preset.orEmpty()) },
+            restore = {
+                Toggles(
+                    it[0] as Boolean, it[1] as Boolean, it[2] as Boolean, it[3] as Boolean,
+                    it.getOrNull(4) as? Boolean ?: false, it.getOrNull(5) as? Boolean ?: false,
+                    (it.getOrNull(6) as? String)?.ifEmpty { null },
+                )
+            },
         )
         val ModelSaver = listSaver<ModelChoice?, String>(
-            save = { m -> m?.let { listOf(it.endpointId, it.endpointName, it.model, it.display) }.orEmpty() },
-            restore = { if (it.size == 4) ModelChoice(it[0], it[1], it[2], it[3]) else null },
+            save = { m ->
+                m?.let { listOf(it.endpointId, it.endpointName, it.model, it.display, it.url, it.category, it.reasoningLevels.joinToString(",")) }.orEmpty()
+            },
+            restore = {
+                if (it.size >= 4) {
+                    ModelChoice(
+                        it[0], it[1], it[2], it[3], it.getOrNull(4).orEmpty(), it.getOrNull(5).orEmpty(),
+                        it.getOrNull(6).orEmpty().split(",").filter(String::isNotEmpty),
+                    )
+                } else null
+            },
         )
         val FilesSaver = listSaver<List<UploadedFile>, String>(
             save = { files -> files.flatMap { listOf(it.id, it.name, it.mime) } },

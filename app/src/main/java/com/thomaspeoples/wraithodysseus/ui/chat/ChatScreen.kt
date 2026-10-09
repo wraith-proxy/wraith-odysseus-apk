@@ -1,5 +1,7 @@
 package com.thomaspeoples.wraithodysseus.ui.chat
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -7,6 +9,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,12 +19,19 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
@@ -32,9 +43,11 @@ import com.thomaspeoples.wraithodysseus.chat.ChatApi
 import com.thomaspeoples.wraithodysseus.chat.HistoryMessage
 import com.thomaspeoples.wraithodysseus.chat.MediaPlayerOutput
 import com.thomaspeoples.wraithodysseus.ui.chat.parts.ResearchJobCards
+import com.thomaspeoples.wraithodysseus.ui.common.ConfirmDialog
 import com.thomaspeoples.wraithodysseus.ui.common.LocalSnackbar
 import com.thomaspeoples.wraithodysseus.ui.theme.Muted
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /** The chat/{sid} route, and the app's home: the drawer behind [onMenu]
@@ -52,10 +65,19 @@ fun ChatScreen(
     val context = LocalContext.current
     val cacheDir = context.applicationContext.cacheDir
     val vm = viewModel(key = sessionId) {
-        ChatViewModel(api, sessionId, createSavedStateHandle(), speech = MediaPlayerOutput(cacheDir))
+        ChatViewModel(api, sessionId, createSavedStateHandle(), speech = MediaPlayerOutput(cacheDir), canUseBash = canUseBash)
     }
+    vm.canUseBash = canUseBash
     val snackbar = LocalSnackbar.current
     LaunchedEffect(vm) { vm.notices.collect { snackbar.showSnackbar(it) } }
+    vm.openChat = onOpenChat
+
+    // The header's name, the chat's own mode for the switches, and the ring:
+    // asked on opening and again each time a run (or another action) ends.
+    LaunchedEffect(vm) { vm.loadChatInfo() }
+    LaunchedEffect(vm, vm.running) { if (!vm.running) vm.refreshContext() }
+    var ringOpen by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     // Covers screen-off and app switches: a run that dropped (or was started
     // elsewhere) is picked up again, replayed from its start.
@@ -71,7 +93,19 @@ fun ChatScreen(
             .systemBarsPadding()
             .imePadding(),
     ) {
-        ChatHeader(vm, onMenu)
+        ChatHeader(
+            vm,
+            onMenu,
+            onRing = { ringOpen = true },
+            onCopy = {
+                scope.launch {
+                    vm.transcript()?.let { text ->
+                        context.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText("chat", text))
+                        snackbar.showSnackbar("Chat copied")
+                    }
+                }
+            },
+        )
 
         val bottomFirst = remember(vm.messages) { vm.messages.asReversed() }
         // Rewrite is offered on the last reply only: the server rewrites its last assistant row.
@@ -111,22 +145,79 @@ fun ChatScreen(
 
         vm.ask?.takeIf { it.approvalId != null }?.let { ApprovalSheet(it, vm::decide) }
 
-        Composer(
-            draft = vm.draft,
-            onDraft = { vm.draft = it },
-            toggles = vm.toggles,
-            onToggles = { vm.toggles = it },
-            showTerminal = canUseBash,
-            attachments = vm.attachments,
-            uploading = vm.uploading,
-            onPicked = { uri -> context.applicationContext.let { app -> vm.attachFile { readUri(app, uri) } } },
-            onRemoveAttachment = vm::removeAttachment,
-            running = vm.running,
-            canStop = vm.canStop,
-            onSend = vm::send,
-            onStop = { vm.stop() },
+        val closed = vm.closed
+        if (closed != null) {
+            Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(closed, color = Muted, modifier = Modifier.weight(1f))
+                TextButton(onClick = { vm.newChat() }) { Text("New chat") }
+                TextButton(onClick = onMenu) { Text("Chats") }
+            }
+        } else {
+            Composer(
+                draft = vm.draft,
+                onDraft = {
+                    vm.draft = it
+                    vm.noteDraft(it)
+                },
+                toggles = vm.toggles,
+                onToggles = { vm.updateToggles(it) },
+                showTerminal = canUseBash,
+                attachments = vm.attachments,
+                uploading = vm.uploading,
+                onPicked = { uri -> context.applicationContext.let { app -> vm.attachFile { readUri(app, uri) } } },
+                onRemoveAttachment = vm::removeAttachment,
+                running = vm.running,
+                canStop = vm.canStop,
+                onSend = vm::send,
+                onStop = { vm.stop() },
+                onNew = vm::newChat,
+                queued = vm.queued?.text?.ifBlank { "(attachment)" },
+                onCancelQueued = vm::cancelQueued,
+                presets = vm.presets,
+                onExpand = { scope.launch { vm.loadPresets() } },
+                suggestions = vm.suggestions(),
+            )
+        }
+    }
+
+    if (ringOpen) ContextSheet(vm) { ringOpen = false }
+    if (vm.confirmDelete) {
+        ConfirmDialog(
+            title = "Delete this chat?",
+            text = "The chat and all its messages will be deleted. This cannot be undone.",
+            confirm = "Delete",
+            onConfirm = vm::deleteChat,
+            onDismiss = { vm.confirmDelete = false },
         )
     }
+    if (vm.renaming) RenameDialog(vm.title.orEmpty(), onDismiss = { vm.renaming = false }, onRename = vm::rename)
+    vm.helpText?.let { text ->
+        AlertDialog(
+            onDismissRequest = { vm.helpText = null },
+            title = { Text("Commands", style = MaterialTheme.typography.titleMedium) },
+            text = { Text(text, style = MaterialTheme.typography.bodySmall) },
+            confirmButton = { TextButton(onClick = { vm.helpText = null }) { Text("OK") } },
+            containerColor = MaterialTheme.colorScheme.surface,
+        )
+    }
+}
+
+@Composable
+private fun RenameDialog(current: String, onDismiss: () -> Unit, onRename: (String) -> Unit) {
+    var name by remember { mutableStateOf(current) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Rename chat", style = MaterialTheme.typography.titleMedium) },
+        text = { OutlinedTextField(value = name, onValueChange = { name = it }, singleLine = true) },
+        confirmButton = {
+            TextButton(onClick = {
+                onDismiss()
+                onRename(name)
+            }, enabled = name.isNotBlank()) { Text("Rename") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        containerColor = MaterialTheme.colorScheme.surface,
+    )
 }
 
 private fun messageMenu(vm: ChatViewModel, m: HistoryMessage, lastReplyId: String?, onOpenChat: (String) -> Unit) = MessageMenu(
