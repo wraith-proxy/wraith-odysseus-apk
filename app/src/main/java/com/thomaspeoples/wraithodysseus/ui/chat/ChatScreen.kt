@@ -71,6 +71,9 @@ fun ChatScreen(
         val bottomFirst = remember(vm.messages) { vm.messages.asReversed() }
         // Rewrite is offered on the last reply only: the server rewrites its last assistant row.
         val lastReplyId = remember(vm.messages) { vm.messages.lastOrNull { it.role == "assistant" }?.dbId }
+        // The run's mode (turn_mode) lands on the message that started it, as in the web.
+        val lastUser = remember(vm.messages) { vm.messages.lastOrNull { it.role == "user" } }
+        val liveMode = vm.live?.details
         LazyColumn(
             Modifier.weight(1f).fillMaxWidth(),
             reverseLayout = true,
@@ -80,13 +83,19 @@ fun ChatScreen(
             vm.error?.let { item { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) } }
             vm.ask?.let { ask -> if (ask.approvalId == null) item { AskChips(ask, enabled = !vm.running, onAnswer = vm::answer) } }
             vm.live?.toolLine?.let { item { Text(it, color = Muted, style = MaterialTheme.typography.labelSmall, maxLines = 2, overflow = TextOverflow.Ellipsis) } }
-            vm.live?.let { turn -> item(key = "live") { LiveBubble(turn) } }
+            vm.live?.notices?.asReversed()?.forEach { n -> item { NoticeLine(n) } }
+            vm.live?.let { turn -> item(key = "live") { LiveBubble(turn, vm.sessionModel) } }
             itemsIndexed(bottomFirst, key = { i, m -> m.dbId ?: "local-${bottomFirst.size - i}" }) { _, m ->
                 Box(Modifier.animateItem(fadeInSpec = tween(300), placementSpec = tween(300))) {
                     val streaming = vm.rewriting?.takeIf { m.dbId != null && m.dbId == lastReplyId }
                     // The rewrite shows in place of the reply as it streams in.
-                    val shown = if (streaming == null) m else m.copy(content = streaming.ifEmpty { "…" }, raw = streaming, thinking = null)
-                    MessageItem(shown, vm::thumbnail, menu = messageMenu(vm, m, lastReplyId, onOpenChat))
+                    val shown = when {
+                        streaming != null -> m.copy(content = streaming.ifEmpty { "…" }, raw = streaming, thinking = null)
+                        m === lastUser && liveMode?.mode != null ->
+                            m.copy(details = m.details.copy(mode = liveMode.mode, autoEscalated = liveMode.autoEscalated))
+                        else -> m
+                    }
+                    MessageItem(shown, vm::thumbnail, menu = messageMenu(vm, m, lastReplyId, onOpenChat), defaultModel = vm.sessionModel)
                 }
             }
             if (vm.hasOlder) item { TextButton(onClick = { vm.loadOlder() }) { Text("Load older") } }

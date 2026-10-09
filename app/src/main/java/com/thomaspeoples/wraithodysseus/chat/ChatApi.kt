@@ -50,6 +50,8 @@ data class HistoryMessage(
     /** The stored text before the think split, for an assistant edit: saving
      * the split-out [content] would drop the reasoning from the server's copy. */
     val raw: String = content,
+    /** Sources, tool cards, metrics, mode and time from the row's metadata. */
+    val details: MessageDetails = MessageDetails(),
 )
 
 /** POST /api/session/{sid}/fork. */
@@ -418,6 +420,7 @@ class ChatApi(private val http: Http) {
                         thinking = thinking,
                         attachments = attachments,
                         raw = shown,
+                        details = parseDetails(meta),
                     )
                 }
             return HistoryPage(

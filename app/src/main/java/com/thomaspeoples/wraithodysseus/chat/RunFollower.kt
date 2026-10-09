@@ -29,9 +29,11 @@ sealed interface RunEnd {
 class RunFollower(
     private val api: ChatApi,
     private val sessionId: String,
+    /** The first stream is a resume of a run begun earlier, so its events are a replay. */
+    private val resumed: Boolean = false,
     private val sleep: suspend (Long) -> Unit = { delay(it) },
 ) {
-    private val state = MutableStateFlow(TurnState())
+    private val state = MutableStateFlow(TurnState(replayed = resumed))
     val turn: StateFlow<TurnState> = state
 
     /** What stop needs. Null on an approval-deny stream, which has no run. */
@@ -51,7 +53,14 @@ class RunFollower(
         var stream = first
         while (true) {
             runId = stream.runId
-            state.value = TurnState()
+            // Only a turn whose thinking was timed live keeps its clocks; a
+            // replay lands in milliseconds and would print a bogus time.
+            val prev = state.value
+            state.value = when {
+                first === stream -> TurnState(replayed = resumed)
+                !prev.replayed && prev.thinkEndMs != null -> TurnState(startedMs = prev.startedMs, thinkStartMs = prev.thinkStartMs, thinkEndMs = prev.thinkEndMs, replayed = true)
+                else -> TurnState(replayed = true)
+            }
             var dropped = false
             try {
                 val done = stream.events

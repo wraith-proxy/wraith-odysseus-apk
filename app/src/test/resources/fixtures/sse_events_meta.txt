@@ -1,0 +1,20 @@
+: turn_mode: routes/chat_routes.py:3766
+data: {"type": "turn_mode", "mode": "agent", "auto_escalated": true}
+
+: model_info: routes/chat_routes.py:3978
+data: {"type": "model_info", "model": "qwen3-30b-a3b", "endpoint_id": "ep_local01", "endpoint_label": "Local llama"}
+
+: model_actual: src/llm_core.py:544
+data: {"type": "model_actual", "requested_model": "qwen3-30b-a3b", "model": "org/qwen3-coder-480b-Q4_K_M"}
+
+: metrics: routes/chat_routes.py:4388 (keys from :4363-4378) and src/agent_loop.py:16221-16241
+data: {"type": "metrics", "data": {"response_time": 3.21, "time_to_first_token": 0.41, "input_tokens": 1200, "output_tokens": 340, "tokens_per_second": 52.4, "tps_source": "computed", "usage_source": "real", "context_percent": 71.5, "context_length": 32768, "model": "org/qwen3-coder-480b", "cost_usd": 0.00123, "agent_prep_time": 0.25, "agent_model_wait_time": 0.16, "agent_prep_breakdown": {"tool_select": 0.1, "memory_lookup": 0.15}, "tool_schema_count": 12, "agent_rounds": 3, "tool_calls": 2}}
+
+: an empty early frame must not wipe the numbers: routes/chat_routes.py:4088
+data: {"type": "metrics", "data": {"total_time": 0}}
+
+: message_saved: routes/chat_routes.py:4335
+data: {"type": "message_saved", "id": "m-0207"}
+
+data: [DONE]
+

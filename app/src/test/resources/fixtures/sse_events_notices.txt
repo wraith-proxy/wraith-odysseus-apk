@@ -1,0 +1,26 @@
+: compacted: routes/chat_routes.py:3932
+data: {"type": "compacted", "context_length": 32768}
+
+: context_trimmed: routes/chat_routes.py:3934
+data: {"type": "context_trimmed", "data": {"context_length": 8192, "messages_before": 40, "messages_after": 12, "tokens_before": 9000, "tokens_after": 3000}}
+
+: rounds_exhausted: src/agent_loop.py:37186
+data: {"type": "rounds_exhausted", "rounds": 25}
+
+: budget_exceeded: src/agent_loop.py:32185
+data: {"type": "budget_exceeded", "limit": 30, "used": 30}
+
+: loop_breaker_triggered: src/agent_loop.py:27949
+data: {"type": "loop_breaker_triggered", "reason": "artifact_recovery_unoffered_tool", "round": 4, "attempt": 2}
+
+: teacher_takeover: src/teacher_escalation.py:661
+data: {"type": "teacher_takeover", "teacher_model": "big-model", "student_failure": "gave up after 3 tries"}
+
+: escalation_failed: src/teacher_escalation.py:652
+data: {"type": "escalation_failed", "reason": "teacher endpoint not resolvable: boom"}
+
+: fallback: src/llm_core.py:4607
+data: {"type": "fallback", "selected_model": "org/model-a-Q8_0", "answered_by": "org/model-b", "selected_endpoint_id": "ep1", "answered_by_endpoint_id": "ep2", "candidate_index": 1, "reason": "timeout", "failures": []}
+
+data: [DONE]
+

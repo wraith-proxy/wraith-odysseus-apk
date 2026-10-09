@@ -34,7 +34,7 @@ class RunFollowerTest {
     @After
     fun tearDown() = server.shutdown()
 
-    private fun follower() = RunFollower(api, "s1") { waits += it }
+    private fun follower() = RunFollower(api, "s1", sleep = { waits += it })
 
     private fun sse(body: String, runId: String) =
         MockResponse().setHeader("Content-Type", "text/event-stream").setHeader("X-Odysseus-Run-Id", runId).setBody(body)

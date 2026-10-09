@@ -31,12 +31,23 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.thomaspeoples.wraithodysseus.chat.HistoryMessage
+import com.thomaspeoples.wraithodysseus.chat.MessageDetails
 import com.thomaspeoples.wraithodysseus.chat.TurnState
 import com.thomaspeoples.wraithodysseus.chat.UploadedFile
+import com.thomaspeoples.wraithodysseus.chat.modelLabel
+import com.thomaspeoples.wraithodysseus.chat.shortModel
 import com.thomaspeoples.wraithodysseus.chat.visibleAssistantText
+import com.thomaspeoples.wraithodysseus.ui.chat.parts.DetailsFooter
+import com.thomaspeoples.wraithodysseus.ui.chat.parts.FindingsBox
+import com.thomaspeoples.wraithodysseus.ui.chat.parts.GeneratedImages
+import com.thomaspeoples.wraithodysseus.ui.chat.parts.MessageHeader
+import com.thomaspeoples.wraithodysseus.ui.chat.parts.RagBox
+import com.thomaspeoples.wraithodysseus.ui.chat.parts.SourcesBox
+import com.thomaspeoples.wraithodysseus.ui.chat.parts.ToolCardView
 import com.thomaspeoples.wraithodysseus.ui.common.LocalSnackbar
 import com.thomaspeoples.wraithodysseus.ui.common.Markdown
 import com.thomaspeoples.wraithodysseus.ui.common.ThinkingBlock
@@ -71,9 +82,45 @@ internal fun Bubble(user: Boolean, modifier: Modifier = Modifier, content: @Comp
     }
 }
 
-/** One message from the history, with its footer and, on a hold, every action. */
+/**
+ * The inside of a reply bubble, shared by the saved message and the one still
+ * streaming so the one becomes the other without changing shape: header, then
+ * the sources, reasoning, tool calls and images, then the text and what
+ * trails it.
+ */
 @Composable
-internal fun MessageItem(m: HistoryMessage, thumbnail: suspend (String) -> ByteArray, menu: MessageMenu? = null) {
+private fun ReplyContent(
+    name: String?,
+    timeMs: Long?,
+    d: MessageDetails,
+    thinking: String?,
+    thinkingActive: Boolean,
+    thinkingSeconds: String?,
+    answer: String,
+    placeholder: Boolean,
+) {
+    MessageHeader(user = false, name = name, timeMs = timeMs, details = d)
+    SourcesBox(d.sourcesLabel, d.sources)
+    if (!thinking.isNullOrEmpty()) ThinkingBlock(thinking, active = thinkingActive, seconds = thinkingSeconds)
+    d.tools.forEach { ToolCardView(it) }
+    GeneratedImages(d.images)
+    if (answer.isNotBlank()) Markdown(answer)
+    else if (placeholder && thinking.isNullOrEmpty() && d.tools.isEmpty()) Text("…", color = Muted)
+    FindingsBox(d.findings)
+    RagBox(d.ragSources)
+}
+
+/**
+ * One message from the history, with its footer and, on a hold, every action.
+ * [defaultModel] names the model on a reply saved without one.
+ */
+@Composable
+internal fun MessageItem(
+    m: HistoryMessage,
+    thumbnail: suspend (String) -> ByteArray,
+    menu: MessageMenu? = null,
+    defaultModel: String? = null,
+) {
     val user = m.role == "user"
     var layer by remember { mutableStateOf(Layer.None) }
     val haptic = LocalHapticFeedback.current
@@ -95,6 +142,7 @@ internal fun MessageItem(m: HistoryMessage, thumbnail: suspend (String) -> ByteA
             layer = Layer.Full
         }
     }
+    val d = m.details
 
     Column {
         Bubble(
@@ -103,29 +151,58 @@ internal fun MessageItem(m: HistoryMessage, thumbnail: suspend (String) -> ByteA
             // inside); the semantics give TalkBack the same action by name.
             Modifier.onHold(hold).semantics { onLongClick("Message actions") { hold(); true } },
         ) {
-            if (m.attachments.isNotEmpty()) {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { m.attachments.forEach { Thumb(it, thumbnail) } }
-            }
-            m.thinking?.let { ThinkingBlock(it, active = false) }
-            when {
-                user -> Text(m.content, style = MaterialTheme.typography.bodyMedium)
-                m.content.isNotBlank() -> Markdown(m.content)
+            if (user) {
+                MessageHeader(user = true, name = null, timeMs = d.timeMs, details = d)
+                if (m.attachments.isNotEmpty()) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { m.attachments.forEach { Thumb(it, thumbnail) } }
+                }
+                Text(m.content, style = MaterialTheme.typography.bodyMedium)
+            } else {
+                if (m.attachments.isNotEmpty()) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { m.attachments.forEach { Thumb(it, thumbnail) } }
+                }
+                ReplyContent(
+                    name = modelLabel(d.requestedModel, d.model) ?: defaultModel?.let(::shortModel),
+                    timeMs = d.timeMs,
+                    d = d,
+                    thinking = m.thinking,
+                    thinkingActive = false,
+                    thinkingSeconds = d.thinkingSeconds,
+                    answer = m.content,
+                    placeholder = false,
+                )
             }
         }
+        if (!user) DetailsFooter(d)
         MessageFooter(user, canChange = menu?.canChange == true, onAction = runner::run, onMore = { layer = Layer.More })
     }
     MessageLayers(layer, { layer = it }, user, text, menu, runner)
 }
 
-/** The reply still streaming in. */
+/** The reply still streaming in, with the same header, sources, tool calls and figures as it will have saved. */
 @Composable
-internal fun LiveBubble(turn: TurnState) {
-    val answer = turn.answer
-    Bubble(user = false) {
-        if (turn.thinking.isNotEmpty()) ThinkingBlock(turn.thinking, active = answer.isEmpty())
-        if (answer.isNotEmpty()) Markdown(answer)
-        else if (turn.thinking.isEmpty()) Text("…", color = Muted)
+internal fun LiveBubble(turn: TurnState, defaultModel: String? = null) {
+    Column {
+        Bubble(user = false) {
+            ReplyContent(
+                name = modelLabel(turn.requestedModel, turn.model) ?: defaultModel?.let(::shortModel),
+                timeMs = turn.startedMs,
+                d = turn.details,
+                thinking = turn.thinking,
+                thinkingActive = turn.answer.isEmpty(),
+                thinkingSeconds = turn.thinkingSeconds,
+                answer = turn.answer,
+                placeholder = true,
+            )
+        }
+        DetailsFooter(turn.details)
     }
+}
+
+/** A short muted line: context compacted, step limit reached, fallback... */
+@Composable
+internal fun NoticeLine(text: String) {
+    Text(text, color = Muted, style = MaterialTheme.typography.labelSmall, fontStyle = FontStyle.Italic)
 }
 
 @Composable

@@ -1,0 +1,28 @@
+: tool_start: src/agent_loop.py:33426
+data: {"type": "tool_start", "tool": "bash", "command": "ls -la", "full_command": "ls -la", "round": 1, "call_id": "call_a", "tool_call_id": "call_a"}
+
+: tool_progress: src/containment.py:1160 payload with tool and round added at src/agent_loop.py:33494
+data: {"type": "tool_progress", "tool": "bash", "round": 1, "elapsed_s": 2.5, "tail": "total 8"}
+
+: tool_output: src/agent_loop.py:34035 (+ diff at :34134, screenshot at :34115)
+data: {"type": "tool_output", "tool": "bash", "command": "ls -la", "output": "total 8\nREADME.md", "exit_code": 0, "execution_attempted": true, "blocked": false, "call_id": "call_a"}
+
+: a second call that fails and edits a file
+data: {"type": "tool_start", "tool": "write_file", "command": "write a.txt", "full_command": "write a.txt", "round": 2, "call_id": "call_b"}
+
+data: {"type": "tool_output", "tool": "write_file", "command": "write a.txt", "output": "no space left", "exit_code": 1, "call_id": "call_b", "diff": {"file": "a.txt", "text": "--- a\n+++ b\n@@ -1 +1 @@\n-old\n+new", "added": 1, "removed": 1, "new_file": false}, "screenshot": "data:image/png;base64,AAAA"}
+
+: generated_image: src/agent_loop.py:34148 (url plus the image_* keys)
+data: {"type": "generated_image", "url": "/api/generated-image/x.png", "image_url": "/api/generated-image/x.png", "image_id": "x", "image_prompt": "a red boat", "image_model": "img-1", "image_size": "1024x1024"}
+
+: the same image again (tool_output forwards it too) is not listed twice
+data: {"type": "generated_image", "url": "/api/generated-image/x.png", "image_url": "/api/generated-image/x.png"}
+
+: agent_step: src/agent_loop.py:27651
+data: {"type": "agent_step", "round": 3}
+
+: plan_update: src/agent_loop.py:33966 (the web reads data.plan: chat.js:5033)
+data: {"type": "plan_update", "data": {"plan": "1. look\n2. fix"}}
+
+data: [DONE]
+

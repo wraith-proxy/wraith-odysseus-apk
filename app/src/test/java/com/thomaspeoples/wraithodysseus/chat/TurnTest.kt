@@ -122,4 +122,23 @@ class TurnTest {
         assertEquals("Cannot reach llm.example.internal:8080", upstream.error)
         assertEquals("Partial", upstream.answer)
     }
+
+    @Test
+    fun replayedBurstShowsNoThinkingTimeOrStartTime() {
+        val t = TurnState(replayed = true)
+            .apply(SseEvent.Delta("hm", thinking = true, replacesTurn = false), nowMs = 5_000)
+            .apply(SseEvent.Delta("Hi", thinking = false, replacesTurn = false), nowMs = 5_001)
+        assertEquals("hm", t.thinking)
+        assertNull(t.thinkingSeconds)
+        assertNull(t.startedMs)
+    }
+
+    @Test
+    fun liveThinkingIsStillTimed() {
+        val t = TurnState()
+            .apply(SseEvent.Delta("hm", thinking = true, replacesTurn = false), nowMs = 1_000)
+            .apply(SseEvent.Delta("Hi", thinking = false, replacesTurn = false), nowMs = 3_000)
+        assertEquals(1_000L, t.startedMs)
+        assertEquals(2_000L, t.thinkEndMs!! - t.thinkStartMs!!)
+    }
 }

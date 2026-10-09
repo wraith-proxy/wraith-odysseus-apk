@@ -422,7 +422,7 @@ class ChatViewModel(
             error = null
         }
         val job = viewModelScope.launch {
-            val f = RunFollower(api, sessionId)
+            val f = RunFollower(api, sessionId, resumed = quiet)
             var mirror: Job? = null
             var opened = false
             val end = try {
