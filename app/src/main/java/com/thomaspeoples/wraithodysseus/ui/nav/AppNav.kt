@@ -285,6 +285,7 @@ fun AppNav() {
                             sessionId = chat.arguments?.getString("sid").orEmpty(),
                             canUseBash = canUseBash,
                             onMenu = ::openDrawer,
+                            onOpenChat = { nav.openChat(it) },
                         )
                     }
                     composable(Routes.SEARCH) {
