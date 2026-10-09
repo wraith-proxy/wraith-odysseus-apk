@@ -1,0 +1,6 @@
+{"memory":[
+{"id":"m1","text":"Likes oat milk","category":"preference","timestamp":1700000300,"uses":3,"source":"user"},
+{"id":"m2","text":"Lives in Leeds","category":"fact","timestamp":1700000100,"uses":0,"pinned":true},
+{"id":"m3","text":"Project Wraith ships in March","category":"project","timestamp":1700000200,"uses":1,"pinned":false},
+{"id":"m4","text":null,"category":null,"timestamp":null}
+]}

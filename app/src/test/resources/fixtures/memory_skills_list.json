@@ -1,0 +1,8 @@
+{"skills":[
+{"name":"summarise-pr","description":"Summarise a pull request","category":"coding","tags":["git","review"],"status":"published","uses":5,"confidence":0.9,"version":"1.0.0","source":"learned"},
+{"name":"draft-email","description":"Write a polite email","category":"writing","tags":[],"uses":0,"confidence":0.5},
+{"name":"old-one","description":"Binned by an audit","status":"binned","uses":9},
+{"name":"web-search","description":"Built in","status":"published","source":"builtin"},
+{"id":"legacy-id","description":"No name"},
+{"description":"No name or id"}
+],"count":6}
