@@ -27,7 +27,7 @@ the update check. The Compose screens themselves are checked on a device.
 
 | File | Trigger | Runner | Does |
 |---|---|---|---|
-| `test.yml` | push to any branch but `main` | `ghost-runner-android` | unit tests + coverage, Android Lint, `assembleDebug`, security scan, then auto-merge |
+| `test.yml` | push to any branch but `main` | `ghost-runner-android` | unit tests + coverage, Android Lint, F-Droid lint, `assembleDebug`, security scan, then auto-merge |
 | `release.yml` | push to `main` | `ghost-runner` then `ghost-runner-android` | version bump, tag, build the tag, verify signing, publish release |
 | `pages.yml` | push to `main` | `ghost-runner-android` | coverage badge, mkdocs build, publish to ghost-site |
 
@@ -47,6 +47,14 @@ the update check. The Compose screens themselves are checked on a device.
 Each tool is downloaded at a pinned version and checked against a pinned
 SHA-256. Run it locally the same way as the build below, with
 `bin/security-scan.sh` as the command.
+
+### F-Droid lint
+
+`bin/fdroid-lint.sh` runs `fdroid lint` (fdroidserver, pip-installed at a
+pinned version) on `docs/fdroid/com.thomaspeoples.wraithodysseus.yml`,
+checking categories against fdroiddata's live list. It also fails if
+`fastlane/.../changelogs/<versionCode>.txt` is missing for the current
+versionCode.
 
 ### Release, step by step
 
@@ -72,16 +80,20 @@ branches stay local.
 ## Versioning
 
 `.cz.yaml` uses `version_provider: scm`: the current version is the latest
-`android-X.Y.Z` tag, and `appVersionName` in `app/build.gradle.kts` is the
-only line commitizen rewrites. The tag shape is load-bearing:
+`android-X.Y.Z` tag, and `versionName` in `app/build.gradle.kts` is the
+only line commitizen rewrites itself. The tag shape is load-bearing:
 `UpdateChecker.kt` and Obtainium both match it exactly.
 
 Commit subjects are `<type>/TJP-NNNNN: <summary>`. `feature` bumps minor,
 `fix`/`bug` bump patch, `break` bumps major, and `chore` bumps nothing.
 
-`versionCode` is derived, `major * 10000 + minor * 100 + patch` (minimum 1).
-The build fails if minor or patch reaches 100, since 1.100.0 would collide
-with 2.0.0. `VersionCodeTest` pins the built value to that scheme.
+`versionCode` is `major * 10000 + minor * 100 + patch` (minimum 1), written
+as a literal so F-Droid's `checkupdates` can read it at each tag. The
+commitizen `pre_bump_hooks` entry, `bin/fdroid-bump.py`, rewrites it on every
+bump and writes `fastlane/.../changelogs/<versionCode>.txt` from the new
+`CHANGELOG.md` section (features first, cut at F-Droid's 500 characters). The
+hook refuses minor or patch of 100 or more, since 1.100.0 would collide with
+2.0.0, and `VersionCodeTest` fails if versionCode and versionName disagree.
 
 ## Secrets
 

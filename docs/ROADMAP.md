@@ -50,15 +50,21 @@ Compare and Cookbook stay in the web UI; their drawer rows open it.
 ## F-Droid
 
 Ready now: no proprietary dependencies, `INTERNET` only, checksummed wrapper,
-no dependency-info block, `UPDATE_CHECK` switch.
+no dependency-info block, `UPDATE_CHECK` switch, a linted recipe with
+automatic updates, a literal versionCode and per-versionCode changelogs kept
+by the bump hook, and fastlane screenshots.
 
-Deferred until an fdroiddata merge request:
+- [ ] Open the one fdroiddata merge request (by hand: it is a fork and MR on
+  gitlab.com).
+- [ ] Bake fdroidserver into the runner image, like the scan tools.
+
+Deferred until after the fdroiddata merge request:
 
 - **Reproducible builds.** These need an unsigned build and the build-tools
   34 apksigner (an image rebuild). They also need back the build settings the
   bootstrap left out: `aaptOptions.cruncherEnabled = false`,
   `generatedDensities()`, `vcsInfo` off, and the ArtProfile task disabled.
-- `AllowedAPKSigningKeys`, a literal versionCode for `checkupdates`, and
-  per-versionCode changelogs.
+- `AllowedAPKSigningKeys` and `Binaries:`, so F-Droid ships this project's
+  signature. Needs the reproducible build above.
 - An F-Droid-signed build cannot replace an Obtainium install without an
-  uninstall. That will be documented in the listing.
+  uninstall. The listing says so; the signature fix is the item above.

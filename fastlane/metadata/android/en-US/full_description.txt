@@ -37,5 +37,7 @@ compiled out and contact nothing but your own server.
 No analytics, no tracking, no Google Play Services. The only permission is
 Internet access.
 
-Not distributed via Google Play. Install it from this project's Gitea
-releases, or track them with Obtainium.
+Not distributed via Google Play. Besides F-Droid, it is on this project's
+Gitea releases, which Obtainium can track. F-Droid signs its builds with its
+own key, so switching between an F-Droid copy and a Gitea or Obtainium copy
+means uninstalling first, which also logs you out.

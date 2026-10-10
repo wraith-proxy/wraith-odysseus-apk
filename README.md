@@ -28,9 +28,10 @@ page, tagged `android-X.Y.Z`.
   on the phone. It tracks releases automatically.
 - **Direct sideload:** download the APK from Releases and open it. The app also
   checks for a newer release itself on launch.
-- **F-Droid:** not yet. A recipe draft is in
-  [docs/fdroid/](docs/fdroid/com.thomaspeoples.wraithodysseus.yml); see
-  [docs/ROADMAP.md](docs/ROADMAP.md).
+- **F-Droid:** not yet submitted. The recipe is in
+  [docs/fdroid/](docs/fdroid/com.thomaspeoples.wraithodysseus.yml) and CI
+  lints it; see
+  [docs/android-distribution.md](docs/android-distribution.md#f-droid).
 
 Then enter your server's address and log in with your Odysseus username,
 password and (if enabled) 2FA code. The app needs to reach the server the same
@@ -73,9 +74,9 @@ Tailscale `100.x` address works, but the app refuses http for any public host
 or any hostname when the address is entered. The cookie is also never sent over
 http if the server marked it Secure, and redirects are never followed.
 
-**`versionCode` is derived, not stored.** `major * 10000 + minor * 100 +
-patch`, computed in `app/build.gradle.kts` from the one `versionName` string
-commitizen rewrites, so it cannot be forgotten on a bump.
+**`versionCode` follows `versionName`.** `major * 10000 + minor * 100 +
+patch`, rewritten on every bump by a commitizen hook (`bin/fdroid-bump.py`),
+so it cannot be forgotten. It is a literal because F-Droid reads it as text.
 
 **No Google anything.** No Play Services, no Firebase, no downloadable fonts.
 Fira Code is bundled. The only permission is `INTERNET`.

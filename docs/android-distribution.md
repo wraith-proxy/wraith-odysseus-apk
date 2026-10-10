@@ -60,12 +60,22 @@ AndroidX app has and which grants nothing), a checksummed Gradle wrapper, no
 AGP dependency-info block (`release.yml` fails if one appears), and the
 `UPDATE_CHECK` switch.
 
-A draft fdroiddata recipe is in
+The fdroiddata recipe is
 [`docs/fdroid/com.thomaspeoples.wraithodysseus.yml`](https://git.thomaspeoples.com/thomaspeoples/wraith-odysseus-apk/src/branch/main/docs/fdroid/com.thomaspeoples.wraithodysseus.yml).
 It builds the tag with `updateCheck=false`, so an F-Droid build never contacts
-anything but the user's own server. It has not been through `fdroid lint` or
-`fdroid build` yet. Automatic update detection, reproducible builds and
-`AllowedAPKSigningKeys` are left out of it on purpose; see
+anything but the user's own server. CI runs `fdroid lint` on it; it has not
+been through `fdroid build`.
+
+After the one merge request, releases are automatic: the recipe sets
+`AutoUpdateMode: Version` and `UpdateCheckMode: Tags`, so F-Droid finds each
+new `android-*` tag and reads the literal `versionCode` and `versionName` in
+`app/build.gradle.kts` there. The listing text, screenshots and release notes
+come from `fastlane/metadata/android/en-US/`; the bump hook writes
+`changelogs/<versionCode>.txt` each release.
+
+To submit: fork `gitlab.com/fdroid/fdroiddata`, copy the recipe to
+`metadata/com.thomaspeoples.wraithodysseus.yml`, and open a merge request.
+Reproducible builds and `AllowedAPKSigningKeys` are left out on purpose; see
 [the roadmap](ROADMAP.md).
 
 An F-Droid build is signed with F-Droid's key, not this project's, so it cannot

@@ -1,25 +1,5 @@
 import java.util.Properties
 
-// The one place this app's version is written down. commitizen rewrites the
-// appVersionName line on bump (.cz.yaml version_files points at it), and the
-// android-X.Y.Z tag is cut FROM this value, never invented alongside it.
-//
-// versionCode is DERIVED, never stored, so it cannot be forgotten on a bump:
-//
-//     1.0.3  ->  10003
-//
-// Monotonic, which is what F-Droid requires. minor and patch must stay under
-// 100 or 1.100.0 would collide with 2.0.0 -- the require() makes that a build
-// failure instead of a silent downgrade.
-// 0.0.0 is a placeholder: there are no tags yet, so commitizen reads the current
-// version as 0.0.0 and rewrites this line to the first real one on bump.
-val appVersionName = "0.2.0"
-val appVersionCode = appVersionName.split(".").map { it.toInt() }.let { (major, minor, patch) ->
-    require(minor < 100 && patch < 100) { "versionCode scheme needs minor and patch < 100: $appVersionName" }
-    (major * 10000 + minor * 100 + patch)
-        .coerceAtLeast(1) // the 0.0.0 placeholder must still be a legal versionCode
-}
-
 // local.properties is gitignored (see local.properties.example). There is no
 // server URL in here on purpose: the Odysseus address is typed in on the
 // device, so the APK carries no hostname at all.
@@ -55,8 +35,15 @@ android {
         // no native code, so the APK is universal for free.
         minSdk = 29
         targetSdk = 36
-        versionCode = appVersionCode
-        versionName = appVersionName
+        // Both are literals because F-Droid's checkupdates reads them as
+        // text at each android-* tag; a computed value is invisible to it.
+        // Never edit by hand: on bump commitizen rewrites versionName and
+        // bin/fdroid-bump.sh rewrites versionCode as
+        // major*10000 + minor*100 + patch (1.0.3 -> 10003), refusing
+        // minor or patch >= 100 so codes stay monotonic. VersionCodeTest
+        // fails the build if the two ever disagree.
+        versionCode = 200
+        versionName = "0.2.0"
 
         // false for an F-Droid build: F-Droid ships its own updates, and its
         // inclusion policy wants no phoning home it did not ask for.
