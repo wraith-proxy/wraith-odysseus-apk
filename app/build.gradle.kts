@@ -38,7 +38,7 @@ android {
         // Both are literals because F-Droid's checkupdates reads them as
         // text at each android-* tag; a computed value is invisible to it.
         // Never edit by hand: on bump commitizen rewrites versionName and
-        // bin/fdroid-bump.sh rewrites versionCode as
+        // bin/fdroid-bump.py rewrites versionCode as
         // major*10000 + minor*100 + patch (1.0.3 -> 10003), refusing
         // minor or patch >= 100 so codes stay monotonic. VersionCodeTest
         // fails the build if the two ever disagree.

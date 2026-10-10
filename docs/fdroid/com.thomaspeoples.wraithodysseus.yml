@@ -16,6 +16,8 @@
 #
 # fdroiddata wants no comments and a full commit hash, not a tag: the MR copy
 # is this file run through `fdroid rewritemeta` with commit resolved.
+# Submitted as https://gitlab.com/fdroid/fdroiddata/-/merge_requests/51956;
+# after it merges, fdroiddata's copy is the live one and this is reference.
 
 Categories:
   - AI Chat
@@ -34,9 +36,9 @@ Repo: https://git.thomaspeoples.com/thomaspeoples/wraith-odysseus-apk.git
 Binaries: https://git.thomaspeoples.com/thomaspeoples/wraith-odysseus-apk/releases/download/android-%v/wraith-odysseus.apk
 
 Builds:
-  - versionName: 0.3.1
-    versionCode: 301
-    commit: android-0.3.1
+  - versionName: 0.4.0
+    versionCode: 400
+    commit: android-0.4.0
     subdir: app
     gradle:
       - yes
@@ -45,5 +47,5 @@ AllowedAPKSigningKeys: 76a8f103feb1f229049f167cb7ee224b7f2b4123a364bd1591b618493
 
 AutoUpdateMode: Version
 UpdateCheckMode: Tags ^android-[0-9.]+$
-CurrentVersion: 0.3.1
-CurrentVersionCode: 301
+CurrentVersion: 0.4.0
+CurrentVersionCode: 400

@@ -54,7 +54,8 @@ no dependency-info block, `UPDATE_CHECK` switch, a linted recipe with
 automatic updates, a literal versionCode and per-versionCode changelogs kept
 by the bump hook, and fastlane screenshots.
 
-- [ ] The one fdroiddata merge request.
+- [x] The one fdroiddata merge request:
+  [fdroiddata!51956](https://gitlab.com/fdroid/fdroiddata/-/merge_requests/51956).
 - [ ] Bake fdroidserver into the runner image, like the scan tools.
 
 - [x] Reproducible builds: F-Droid's build image reproduces the CI APK, so
