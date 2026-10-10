@@ -93,8 +93,8 @@ fun AboutScreen(onBack: () -> Unit) {
                     (if (updateCheck) ", apart from the update check below. " else ". ") +
                     "There are no analytics and no tracking. Only the session cookie is " +
                     "stored, sealed with a key that never leaves this device; your password " +
-                    "is never stored. Plain http is allowed only for private network " +
-                    "addresses, so the cookie never crosses the internet unencrypted."
+                    "is never stored. Every connection is https; plain http is refused, so " +
+                    "the cookie is never sent unencrypted."
             )
 
             Section("Update check")

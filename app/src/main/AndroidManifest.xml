@@ -8,11 +8,9 @@
          through the FileProvider below. -->
     <uses-permission android:name="android.permission.INTERNET" />
 
-    <!-- usesCleartextTraffic is on so a server on a home LAN or a Tailscale
-         100.x address can be reached over plain http. It is not a blanket
-         allowance: net/HostPolicy.kt refuses http for any public host at the
-         moment the URL is entered, so the cookie never crosses the internet
-         unencrypted. allowBackup is off and there are no dataExtractionRules
+    <!-- No usesCleartextTraffic: https only, Android's default since API 28
+         (net/HostPolicy.kt refuses an http address with a reason). Tailscale
+         serves https for *.ts.net names. allowBackup is off and there are no dataExtractionRules
          on purpose: the session cookie is sealed with a Keystore key that
          never leaves the device, so a restored copy would be useless. -->
     <application
@@ -21,7 +19,6 @@
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:theme="@style/Theme.WraithOdysseus"
-        android:usesCleartextTraffic="true"
         android:supportsRtl="true"
         tools:ignore="DataExtractionRules">
 

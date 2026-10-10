@@ -31,8 +31,9 @@ android {
     defaultConfig {
         applicationId = "com.thomaspeoples.wraithodysseus"
         // Android 10+, unlike the single-device house app: this one is for
-        // anyone running their own Odysseus server. No abiFilters -- there is
-        // no native code, so the APK is universal for free.
+        // anyone running their own Odysseus server. No abiFilters -- the only
+        // native code is AndroidX's ~9 KiB graphics-path library, so one
+        // universal APK costs nothing.
         minSdk = 29
         targetSdk = 36
         // Both are literals because F-Droid's checkupdates reads them as
@@ -75,7 +76,10 @@ android {
             buildConfigField("boolean", "UPDATE_CHECK", "false")
         }
         release {
-            isMinifyEnabled = false
+            // R8: shrinks the dex from ~26 MB. No reflection or by-name
+            // lookups in this app; OkHttp and AndroidX ship their own rules.
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -139,6 +143,7 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+    testImplementation("com.squareup.okhttp3:okhttp-tls:4.12.0")
     // Android's own org.json is a stub that throws in JVM unit tests; the
     // real artifact puts working parsing on the test classpath.
     testImplementation("org.json:json:20240303")

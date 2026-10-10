@@ -49,9 +49,10 @@ private val faqEntries: List<Pair<String, String>> = listOf(
             "your tailnet, check that Tailscale is connected on the phone, and use the same https " +
             "address that works in the phone's browser.",
     "Why does it refuse my http:// address?" to
-        "Plain http is accepted only for private network addresses (a LAN or a Tailscale 100.x " +
-            "IP). Anything else must be https, so your session cookie never crosses the internet " +
-            "unencrypted. A server that marks its cookie Secure needs https even on a private address.",
+        "The app connects over https only, so your session cookie is never sent unencrypted. " +
+            "On a tailnet, enable HTTPS certificates in the Tailscale admin console and use the " +
+            "server's https://<name>.<tailnet>.ts.net address, the same one that works in the " +
+            "phone's browser.",
     "What does the app store?" to
         "The server address, your username, and the session cookie, which is encrypted with a key " +
             "that never leaves the device. Your password is never stored.",
