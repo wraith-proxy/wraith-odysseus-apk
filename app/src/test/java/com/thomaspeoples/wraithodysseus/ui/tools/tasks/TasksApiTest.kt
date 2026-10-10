@@ -183,6 +183,21 @@ class TasksApiTest {
         assertEquals("t9", created.id)
     }
 
+    /**
+     * The server (task_routes.py create) parses scheduled_date with the "Z"
+     * swapped for +00:00 and then drops the zone without converting, and
+     * compute_next_run keeps only a date strictly after now. So the wire value
+     * must be UTC with a Z (what the web's toISOString sends), and a date equal
+     * to now is already too late.
+     */
+    @Test
+    fun onceDateIsSentAsUtcAndNowIsTooLate() {
+        assertEquals("2026-10-12T05:30:00Z", TasksApi.localDateTimeToUtcIso("2026-10-12T07:30", paris))
+        val base = TaskDraft("llm", null, "p", "once", null, null, null, null, null)
+        assertTrue(TasksApi.onceProblem(base.copy(scheduledDate = "2026-10-09T14:00"), paris, now) != null)
+        assertNull(TasksApi.onceProblem(base.copy(scheduledDate = "2026-10-09T14:01"), paris, now))
+    }
+
     @Test
     fun onceDraftNeedsAFutureReadableDate() {
         val base = TaskDraft("llm", null, "p", "once", null, null, null, null, null)
