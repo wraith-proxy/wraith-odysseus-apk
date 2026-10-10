@@ -162,7 +162,7 @@ fun AppNav() {
     // silently and never blocks the UI -- see UpdateChecker.
     LaunchedEffect(Unit) {
         if (updateChecked) return@LaunchedEffect
-        updateInfo = UpdateChecker.checkForUpdate()
+        updateInfo = UpdateChecker.checkForUpdate(context)
         if (updateInfo == null) updateChecked = true
     }
     updateInfo?.let {

@@ -31,13 +31,12 @@ that requires https always gets https.
 
 Update check: builds downloaded from this project's releases check its Gitea
 releases page once per launch and offer a link when a newer version exists.
-Nothing about you or your server is sent. F-Droid builds have this check
-compiled out and contact nothing but your own server.
+Nothing about you or your server is sent. When F-Droid installed the app the
+check is off, and it contacts nothing but your own server.
 
 No analytics, no tracking, no Google Play Services. The only permission is
 Internet access.
 
 Not distributed via Google Play. Besides F-Droid, it is on this project's
-Gitea releases, which Obtainium can track. F-Droid signs its builds with its
-own key, so switching between an F-Droid copy and a Gitea or Obtainium copy
-means uninstalling first, which also logs you out.
+Gitea releases, which Obtainium can track. Builds are reproducible: F-Droid
+ships the same APK, signed with the same key, so all three update each other.

@@ -1,5 +1,6 @@
 package com.thomaspeoples.wraithodysseus.update
 
+import com.thomaspeoples.wraithodysseus.BuildConfig
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -55,5 +56,17 @@ class UpdateCheckerTest {
             UpdateChecker.newestRelease(releases, "0.1.0"),
         )
         assertNull(UpdateChecker.newestRelease(releases, "0.2.0"))
+    }
+
+    // Unit tests run the debug build, where UPDATE_CHECK is false, so the
+    // sideload cases are pinned to the flag rather than to true.
+    @Test
+    fun anFdroidInstallNeverChecksAndOthersFollowTheBuildFlag() {
+        assertFalse(UpdateChecker.enabledFor("org.fdroid.fdroid"))
+        assertFalse(UpdateChecker.enabledFor("org.fdroid.basic"))
+        assertFalse(UpdateChecker.enabledFor("com.looker.droidify"))
+        assertEquals(BuildConfig.UPDATE_CHECK, UpdateChecker.enabledFor(null))
+        assertEquals(BuildConfig.UPDATE_CHECK, UpdateChecker.enabledFor("dev.imranr.obtainium"))
+        assertEquals(BuildConfig.UPDATE_CHECK, UpdateChecker.enabledFor("com.google.android.packageinstaller"))
     }
 }

@@ -30,6 +30,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.thomaspeoples.wraithodysseus.BuildConfig
 import com.thomaspeoples.wraithodysseus.R
+import com.thomaspeoples.wraithodysseus.update.UpdateChecker
 import com.thomaspeoples.wraithodysseus.ui.theme.CodeStyle
 import com.thomaspeoples.wraithodysseus.ui.theme.Muted
 import com.thomaspeoples.wraithodysseus.ui.theme.themeBackground
@@ -52,6 +53,7 @@ private val libraries = listOf(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AboutScreen(onBack: () -> Unit) {
+    val updateCheck = UpdateChecker.enabled(LocalContext.current)
     Scaffold(
         modifier = Modifier.themeBackground(MaterialTheme.colorScheme.background),
         containerColor = Color.Transparent,
@@ -88,7 +90,7 @@ fun AboutScreen(onBack: () -> Unit) {
             Section("Privacy")
             Para(
                 "The app talks to the server you enter and nothing else" +
-                    (if (BuildConfig.UPDATE_CHECK) ", apart from the update check below. " else ". ") +
+                    (if (updateCheck) ", apart from the update check below. " else ". ") +
                     "There are no analytics and no tracking. Only the session cookie is " +
                     "stored, sealed with a key that never leaves this device; your password " +
                     "is never stored. Plain http is allowed only for private network " +
@@ -97,13 +99,14 @@ fun AboutScreen(onBack: () -> Unit) {
 
             Section("Update check")
             Para(
-                if (BuildConfig.UPDATE_CHECK) {
+                if (updateCheck) {
                     "Once per launch the app asks this project's Gitea releases page " +
                         "($REPO_URL) whether a newer version exists, and offers a link if so. " +
-                        "Nothing about you or your server is sent. F-Droid builds leave this out."
+                        "Nothing about you or your server is sent. It is off when F-Droid " +
+                        "installed the app."
                 } else {
-                    "This build has the update check compiled out. It never contacts " +
-                        "anything but your own server."
+                    "The update check is off: F-Droid installed this copy, or it was built " +
+                        "without one. It never contacts anything but your own server."
                 }
             )
 

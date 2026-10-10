@@ -8,8 +8,14 @@
 # screenshots and per-versionCode changelogs come from fastlane/, which
 # bin/fdroid-bump.py keeps in step on every commitizen bump.
 #
-# Left out until builds are reproducible (see docs/ROADMAP.md):
-# AllowedAPKSigningKeys / Binaries. Until then F-Droid signs with its key.
+# Reproducible: F-Droid checks its build against the APK on the Gitea
+# release (Binaries) and ships that APK with this project's signature
+# (AllowedAPKSigningKeys). So no build flags here -- any flag would make a
+# different APK. The update check turns itself off at runtime when an
+# F-Droid client installed the app (UpdateChecker.enabled).
+#
+# fdroiddata wants no comments and a full commit hash, not a tag: the MR copy
+# is this file run through `fdroid rewritemeta` with commit resolved.
 
 Categories:
   - AI Chat
@@ -25,20 +31,19 @@ AutoName: Wraith for Odysseus
 
 RepoType: git
 Repo: https://git.thomaspeoples.com/thomaspeoples/wraith-odysseus-apk.git
+Binaries: https://git.thomaspeoples.com/thomaspeoples/wraith-odysseus-apk/releases/download/android-%v/wraith-odysseus.apk
 
 Builds:
-  - versionName: 0.2.0
-    versionCode: 200
-    commit: android-0.2.0
+  - versionName: 0.3.1
+    versionCode: 301
+    commit: android-0.3.1
     subdir: app
     gradle:
       - yes
-    # Compiles out the launch-time Gitea update check: F-Droid ships the
-    # updates itself, and the build then contacts only the user's server.
-    gradleprops:
-      - updateCheck=false
+
+AllowedAPKSigningKeys: 76a8f103feb1f229049f167cb7ee224b7f2b4123a364bd1591b6184930f1d5bc
 
 AutoUpdateMode: Version
 UpdateCheckMode: Tags ^android-[0-9.]+$
-CurrentVersion: 0.2.0
-CurrentVersionCode: 200
+CurrentVersion: 0.3.1
+CurrentVersionCode: 301
