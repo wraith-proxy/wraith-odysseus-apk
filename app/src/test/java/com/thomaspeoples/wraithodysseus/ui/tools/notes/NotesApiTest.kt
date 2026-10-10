@@ -193,4 +193,20 @@ class NotesApiTest {
         reply("""{"notes":[{"title":"no id"}]}""")
         assertEquals("Unexpected response", runBlocking { runCatching { api.list(false) }.exceptionOrNull() }!!.message)
     }
+
+    @Test
+    fun `drawingBytes fetches a server path with the session cookie`() = runBlocking {
+        server.enqueue(MockResponse().setBody(okio.Buffer().write(byteArrayOf(7, 8, 9))))
+        val bytes = api.drawingBytes("/api/gallery/file/a.png")
+        assertEquals(listOf<Byte>(7, 8, 9), bytes?.toList())
+        val req = server.takeRequest()
+        assertEquals("/api/gallery/file/a.png", req.path)
+        assertTrue(req.getHeader("Cookie").orEmpty().contains("abc123"))
+    }
+
+    @Test
+    fun `drawingBytes gives null for an oversized picture`() = runBlocking {
+        server.enqueue(MockResponse().setBody(okio.Buffer().write(ByteArray((DRAWING_MAX_BYTES + 1).toInt()))))
+        assertNull(api.drawingBytes("/big.png"))
+    }
 }

@@ -2,7 +2,10 @@ package com.thomaspeoples.wraithodysseus.ui.tools.notes
 
 import com.thomaspeoples.wraithodysseus.net.ApiException
 import com.thomaspeoples.wraithodysseus.net.Http
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -68,6 +71,21 @@ class NotesApi(private val http: Http) {
         val url = notesUrl().apply { if (archived) addQueryParameter("archived", "true") }.build()
         val json = checkBody(http.call(Request.Builder().url(url).build()))
         return parseEach(json.optJSONArray("notes") ?: JSONArray(), ::parseNote)
+    }
+
+    /**
+     * The bytes of a drawing's picture ([DrawingSource.Remote]), fetched through [Http] so the session
+     * cookie only ever goes to the server. Null when it is over [DRAWING_MAX_BYTES] or the answer is empty.
+     */
+    suspend fun drawingBytes(url: String): ByteArray? {
+        val target = if (url.startsWith("/")) http.url(url) else url.toHttpUrl()
+        val response = http.open(Request.Builder().url(target).get().build(), Http.SEND_TIMEOUT_S)
+        return withContext(Dispatchers.IO) {
+            response.use { r ->
+                val body = r.body ?: return@use null
+                readCapped(body.contentLength(), body.source())?.takeIf { it.isNotEmpty() }
+            }
+        }
     }
 
     /** POST /api/notes. Never retried: a lost answer must not make two notes. */

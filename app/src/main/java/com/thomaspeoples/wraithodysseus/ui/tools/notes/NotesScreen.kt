@@ -50,6 +50,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.snapshots.SnapshotStateList
@@ -79,6 +80,7 @@ import com.thomaspeoples.wraithodysseus.ui.common.openInBrowser
 import com.thomaspeoples.wraithodysseus.ui.icons.Lucide
 import com.thomaspeoples.wraithodysseus.ui.theme.Muted
 import com.thomaspeoples.wraithodysseus.ui.tools.ToolEnv
+import kotlinx.coroutines.launch
 import java.time.Instant
 import java.util.UUID
 
@@ -110,6 +112,17 @@ fun NotesScreen(env: ToolEnv) {
     // Held by id so an open sheet or delete confirm survives rotation.
     var sheetKey by rememberSaveable { mutableStateOf<String?>(null) }
     var deletingKey by rememberSaveable { mutableStateOf<String?>(null) }
+    // A drawing note open in the read-only viewer, by id for the same reason.
+    var viewingId by rememberSaveable { mutableStateOf<String?>(null) }
+    val viewing = state.notes.firstOrNull { it.id == viewingId && it.type == "draw" }
+    val scope = rememberCoroutineScope()
+    // The web UI is the only place a drawing can be drawn on.
+    val editInWeb = {
+        val url = env.baseUrl
+        if (url == null || !openInBrowser(context, url)) scope.launch { snackbar.showSnackbar("No browser to open it with") }
+        Unit
+    }
+    val api = remember(env.http) { NotesApi(env.http) }
     val sheet = state.notes.firstOrNull { it.id == sheetKey }
     val deleting = state.notes.firstOrNull { it.id == deletingKey }
     var now by remember { mutableStateOf(Instant.now()) }
@@ -120,7 +133,14 @@ fun NotesScreen(env: ToolEnv) {
     LaunchedEffect(state.notes) { now = Instant.now() }
 
     val open = editing
-    if (open != null) {
+    if (viewing != null && open == null) {
+        DrawingViewer(
+            note = viewing,
+            api = api,
+            onEditInWeb = { editInWeb() },
+            onBack = { viewingId = null },
+        )
+    } else if (open != null) {
         NoteEditor(
             note = open.note,
             saving = vm.saving,
@@ -143,8 +163,8 @@ fun NotesScreen(env: ToolEnv) {
         val tags = remember(state.notes) { allTags(state.notes.filterNot(::isCalendarNote)) }
         val openNote: (Note) -> Unit = { n ->
             if (n.type == "draw") {
-                // A drawing is a picture the web draws on a canvas; here it is only listed.
-                env.baseUrl?.let { openInBrowser(context, it) }
+                // A drawing is drawn on a canvas by the web; here it is only viewed.
+                viewingId = n.id
             } else {
                 editingId = n.id
             }
@@ -274,6 +294,7 @@ fun NotesScreen(env: ToolEnv) {
             val order = state.visible(now).map { it.id }
             val actions = buildList {
                 if (n.type != "draw") add(SheetAction("Edit", Lucide.Pencil) { editingId = n.id })
+                else add(SheetAction("Edit in web UI", Lucide.ExternalLink) { editInWeb() })
                 if (!n.archived) add(SheetAction(if (n.pinned) "Unpin" else "Pin", Lucide.Pin) { vm.togglePin(n) })
                 add(SheetAction(if (n.archived) "Restore" else "Archive", if (n.archived) Lucide.ArchiveRestore else Lucide.Archive) { vm.toggleArchive(n) })
                 if (state.canReorder && order.indexOf(n.id) > 0) add(SheetAction("Move up", Lucide.ChevronUp) { vm.move(n, -1, now) })
@@ -407,7 +428,7 @@ private fun NoteCard(
             }
         }
         when {
-            note.type == "draw" -> Text("Drawing: open the web UI to view it", color = soft, style = MaterialTheme.typography.bodySmall)
+            note.type == "draw" -> Text("Drawing: tap to view it", color = soft, style = MaterialTheme.typography.bodySmall)
             note.isChecklist -> {
                 if (note.type == "goal" && note.content.isNotBlank()) {
                     Text(note.content, color = soft, style = MaterialTheme.typography.bodySmall, maxLines = 3, overflow = TextOverflow.Ellipsis)
