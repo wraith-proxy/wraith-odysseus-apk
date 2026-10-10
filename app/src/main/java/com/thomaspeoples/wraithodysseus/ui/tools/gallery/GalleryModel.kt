@@ -32,7 +32,7 @@ fun sampleSize(width: Int, height: Int, target: Int): Int {
  * starts again from offset 0, and a response for a filter that is no longer
  * current is dropped.
  */
-class GalleryViewModel(private val api: GalleryApi) : ViewModel() {
+class GalleryViewModel(internal val api: GalleryApi) : ViewModel() {
     var items by mutableStateOf<List<GalleryImage>>(emptyList()); private set
     var total by mutableStateOf(0); private set
     var albums by mutableStateOf<List<Album>>(emptyList()); private set

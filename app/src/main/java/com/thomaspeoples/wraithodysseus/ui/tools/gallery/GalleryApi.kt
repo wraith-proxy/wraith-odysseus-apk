@@ -2,8 +2,12 @@ package com.thomaspeoples.wraithodysseus.ui.tools.gallery
 
 import com.thomaspeoples.wraithodysseus.net.ApiException
 import com.thomaspeoples.wraithodysseus.net.Http
+import java.io.File
 import java.io.InputStream
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType
@@ -32,7 +36,7 @@ data class GalleryImage(
     val createdAt: String?,
     val takenAt: String?,
 ) {
-    /** The server also stores videos; the app has nothing to play them with. */
+    /** The server also stores videos; the viewer downloads one to the cache and plays the local copy. */
     val isVideo: Boolean get() = filename.substringAfterLast('.', "").lowercase() in VIDEO_EXTS
 }
 
@@ -132,6 +136,55 @@ class GalleryApi(private val http: Http) {
         } }
     }
 
+    /**
+     * Streams the video behind [url] into [dest] through the app's own Http (HostPolicy, cookie for the server origin
+     * only), so the player only ever sees a local file. The web hands the URL to a `<video>` tag, which the server
+     * answers with a plain FileResponse; a whole-file GET is all that is needed here. Refuses more than [maxBytes],
+     * by Content-Length up front and by counting streamed bytes when the length is missing or wrong. [dest] is
+     * deleted on every failure including cancellation, so a partial file never stays behind.
+     */
+    suspend fun downloadVideo(url: String, dest: File, maxBytes: Long = VIDEO_MAX_BYTES, onProgress: (read: Long, total: Long?) -> Unit = { _, _ -> }) {
+        val target = if (url.startsWith("/")) http.url(url) else url.toHttpUrl()
+        var done = false
+        try {
+            val response = http.open(Request.Builder().url(target).get().build(), Http.SEND_TIMEOUT_S)
+            withContext(Dispatchers.IO) {
+                // Closing the response is what interrupts a read blocked on the socket when this coroutine is cancelled.
+                val closer = launch { try { awaitCancellation() } finally { response.close() } }
+                try {
+                    val body = response.body ?: throw ApiException(200, "The server sent no video")
+                    val length = body.contentLength().takeIf { it >= 0 }
+                    if (length != null && length > maxBytes) throw tooLarge(maxBytes)
+                    dest.parentFile?.mkdirs()
+                    var read = 0L
+                    val buf = ByteArray(COPY_BUFFER)
+                    body.byteStream().use { input ->
+                        dest.outputStream().use { out ->
+                            while (true) {
+                                ensureActive()
+                                val n = input.read(buf)
+                                if (n < 0) break
+                                read += n
+                                if (read > maxBytes) throw tooLarge(maxBytes)
+                                out.write(buf, 0, n)
+                                onProgress(read, length)
+                            }
+                        }
+                    }
+                    if (length != null && read < length) throw java.io.IOException("Video download ended early")
+                } finally {
+                    closer.cancel()
+                    response.close()
+                }
+            }
+            done = true
+        } finally {
+            if (!done) dest.delete()
+        }
+    }
+
+    private fun tooLarge(maxBytes: Long) = ApiException(413, "This video is larger than ${maxBytes / (1024 * 1024)} MB and cannot be played here")
+
     private suspend fun get(path: String): String {
         val text = http.call(Request.Builder().url(path.takeIf { it.startsWith("http") }?.toHttpUrl() ?: http.url(path)).get().build())
         checkBody(text)
@@ -143,6 +196,8 @@ class GalleryApi(private val http: Http) {
         const val PAGE_SIZE = 60
         const val UPLOAD_TIMEOUT_S = 180L
         const val IMAGE_MAX_BYTES = 25L * 1024 * 1024
+        const val VIDEO_MAX_BYTES = 500L * 1024 * 1024
+        private const val COPY_BUFFER = 64 * 1024
         private val JSON = "application/json".toMediaType()
         val IMAGE_EXTS = setOf("png", "jpg", "jpeg", "webp", "gif")
 

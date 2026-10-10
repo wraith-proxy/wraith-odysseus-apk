@@ -66,11 +66,14 @@ import com.thomaspeoples.wraithodysseus.ui.tools.ToolEnv
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * The web UI's Gallery: a paged grid of the library (newest first) with an
  * album / favourites filter, a full-screen viewer to swipe through with
- * favourite and delete, and upload through the system photo picker, which
+ * favourite and delete (a video is downloaded to the cache, then played from
+ * that local file), and upload through the system photo picker, which
  * needs no storage permission. Albums are only filtered by here; creating,
  * renaming and filing into them, tags, AI tagging, the photo editor and
  * bulk download stay in the web UI.
@@ -81,10 +84,13 @@ fun GalleryScreen(env: ToolEnv) {
     val vm = viewModel { GalleryViewModel(GalleryApi(env.http)) }
     val snackbar = LocalSnackbar.current
     val resolver = LocalContext.current.contentResolver
+    val cacheDir = LocalContext.current.cacheDir
     var viewing by rememberSaveable { mutableStateOf<Int?>(null) }
     var deleting by remember { mutableStateOf<GalleryImage?>(null) }
 
     LaunchedEffect(vm) { vm.messages.collect { snackbar.showSnackbar(it) } }
+    // A video the viewer was showing when the process died leaves its file behind.
+    LaunchedEffect(Unit) { withContext(Dispatchers.IO) { clearVideoCache(cacheDir) } }
     BackHandler(enabled = viewing != null) { viewing = null }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { uris ->
@@ -176,7 +182,7 @@ private fun Tile(vm: GalleryViewModel, img: GalleryImage, onClick: () -> Unit) {
     }
 }
 
-/** The image downsampled to [maxPx]; a spinner while it loads, a note when it cannot be shown (videos, failed fetches). */
+/** The image downsampled to [maxPx]; a spinner while it loads, a play icon for a video poster, blank when a fetch failed. */
 @Composable
 private fun Photo(vm: GalleryViewModel, img: GalleryImage, maxPx: Int, scale: ContentScale, modifier: Modifier) {
     val bitmap by produceState<ImageBitmap?>(null, img.id, maxPx) { value = vm.bitmap(img, maxPx)?.asImageBitmap() }
@@ -185,7 +191,7 @@ private fun Photo(vm: GalleryViewModel, img: GalleryImage, maxPx: Int, scale: Co
         if (b != null) {
             Image(b, img.prompt, contentScale = scale, modifier = Modifier.fillMaxSize())
         } else {
-            Text(if (img.isVideo) "Video" else "", color = Muted, style = MaterialTheme.typography.labelMedium)
+            if (img.isVideo) Icon(Lucide.Play, "Video", tint = Muted, modifier = Modifier.size(36.dp))
         }
     }
 }
@@ -219,7 +225,10 @@ private fun Viewer(vm: GalleryViewModel, start: Int, onClose: () -> Unit, onDele
             }
         }
         HorizontalPager(pager, modifier = Modifier.weight(1f).fillMaxWidth(), key = { vm.items.getOrNull(it)?.id ?: it }) { page ->
-            vm.items.getOrNull(page)?.let { Photo(vm, it, FULL_PX, ContentScale.Fit, Modifier.fillMaxSize().clip(MaterialTheme.shapes.extraSmall)) }
+            vm.items.getOrNull(page)?.let {
+                if (it.isVideo) VideoPage(vm.api, it, Modifier.fillMaxSize())
+                else Photo(vm, it, FULL_PX, ContentScale.Fit, Modifier.fillMaxSize().clip(MaterialTheme.shapes.extraSmall))
+            }
         }
         if (img != null) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {

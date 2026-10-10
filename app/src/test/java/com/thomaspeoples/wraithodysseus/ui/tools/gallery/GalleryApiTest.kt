@@ -4,6 +4,9 @@ import com.thomaspeoples.wraithodysseus.net.ApiException
 import com.thomaspeoples.wraithodysseus.net.Http
 import com.thomaspeoples.wraithodysseus.net.SessionCookie
 import com.thomaspeoples.wraithodysseus.net.SessionState
+import kotlinx.coroutines.DelicateCoroutinesApi
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import okhttp3.HttpUrl
 import okhttp3.mockwebserver.MockResponse
@@ -211,5 +214,115 @@ class GalleryApiTest {
     fun humanSizes() {
         assertEquals("2.0 MB", humanSize(2L shl 20))
         assertEquals("5 KB", humanSize(5120))
+    }
+}
+
+@OptIn(DelicateCoroutinesApi::class)
+class GalleryVideoDownloadTest {
+
+    private class FakeSession(override var baseUrl: HttpUrl?, override var cookie: SessionCookie?) : SessionState
+
+    private val server = MockWebServer()
+    private val other = MockWebServer()
+    private lateinit var api: GalleryApi
+    private lateinit var dir: java.io.File
+
+    @Before
+    fun setUp() {
+        server.start()
+        other.start()
+        dir = java.nio.file.Files.createTempDirectory("gv").toFile()
+        api = GalleryApi(Http(FakeSession(server.url("/"), SessionCookie("abc123", Long.MAX_VALUE, secure = false))))
+    }
+
+    @After
+    fun tearDown() {
+        server.shutdown()
+        other.shutdown()
+        dir.deleteRecursively()
+    }
+
+    private val bytes = ByteArray(10_000) { (it % 251).toByte() }
+
+    private fun fileBody(data: ByteArray) = okio.Buffer().write(data)
+
+    @Test
+    fun downloadsToFileWithCookieAndProgress() = runBlocking {
+        server.enqueue(MockResponse().setBody(fileBody(bytes)))
+        val dest = java.io.File(dir, "v.mp4")
+        var last = 0L
+        var total: Long? = null
+        api.downloadVideo("/api/generated-image/abc.mp4", dest) { r, t -> last = r; total = t }
+        val req = server.takeRequest()
+        assertEquals("/api/generated-image/abc.mp4", req.path)
+        assertEquals("odysseus_session=abc123", req.getHeader("Cookie"))
+        assertTrue(bytes.contentEquals(dest.readBytes()))
+        assertEquals(bytes.size.toLong(), last)
+        assertEquals(bytes.size.toLong(), total)
+    }
+
+    @Test
+    fun cookieIsNotSentToAnotherOrigin() = runBlocking {
+        other.enqueue(MockResponse().setBody(fileBody(bytes)))
+        val dest = java.io.File(dir, "v.mp4")
+        api.downloadVideo(other.url("/clip.mp4").toString(), dest)
+        assertNull(other.takeRequest().getHeader("Cookie"))
+        assertEquals(bytes.size.toLong(), dest.length())
+    }
+
+    @Test
+    fun refusesOversizeByContentLengthWithoutWriting() {
+        server.enqueue(MockResponse().setBody(fileBody(bytes)))
+        val dest = java.io.File(dir, "v.mp4")
+        val e = runBlocking { runCatching { api.downloadVideo("/v.mp4", dest, maxBytes = 5_000) }.exceptionOrNull() }
+        assertTrue(e is ApiException)
+        assertTrue(e!!.message!!.contains("larger than"))
+        assertFalse(dest.exists())
+    }
+
+    @Test
+    fun refusesOversizeWhenStreamedWithoutLengthAndDeletesPartial() {
+        server.enqueue(MockResponse().setChunkedBody(fileBody(bytes), 1_000))
+        val dest = java.io.File(dir, "v.mp4")
+        val e = runBlocking { runCatching { api.downloadVideo("/v.mp4", dest, maxBytes = 5_000) }.exceptionOrNull() }
+        assertTrue(e is ApiException)
+        assertFalse(dest.exists())
+    }
+
+    @Test
+    fun httpErrorLeavesNoFile() {
+        server.enqueue(MockResponse().setResponseCode(404).setBody("{\"detail\":\"Image not found\"}"))
+        val dest = java.io.File(dir, "v.mp4")
+        val e = runBlocking { runCatching { api.downloadVideo("/v.mp4", dest) }.exceptionOrNull() }
+        assertTrue(e is ApiException)
+        assertFalse(dest.exists())
+    }
+
+    @Test
+    fun truncatedBodyDeletesPartial() {
+        server.enqueue(
+            MockResponse().setBody(fileBody(bytes))
+                .setSocketPolicy(okhttp3.mockwebserver.SocketPolicy.DISCONNECT_DURING_RESPONSE_BODY),
+        )
+        val dest = java.io.File(dir, "v.mp4")
+        val e = runBlocking { runCatching { api.downloadVideo("/v.mp4", dest) }.exceptionOrNull() }
+        assertTrue(e is java.io.IOException)
+        assertFalse(dest.exists())
+    }
+
+    @Test
+    fun cancelMidDownloadDeletesPartial() = runBlocking {
+        server.enqueue(
+            MockResponse().setBody(fileBody(bytes)).throttleBody(1_000, 100, java.util.concurrent.TimeUnit.MILLISECONDS),
+        )
+        val dest = java.io.File(dir, "v.mp4")
+        val started = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val job = kotlinx.coroutines.GlobalScope.launch {
+            api.downloadVideo("/v.mp4", dest) { r, _ -> if (r > 0) started.complete(Unit) }
+        }
+        started.await()
+        job.cancelAndJoin()
+        assertTrue(job.isCancelled)
+        assertFalse(dest.exists())
     }
 }
