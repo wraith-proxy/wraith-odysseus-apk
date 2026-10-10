@@ -1,2 +1,5 @@
 # AuthRepoTest's fake session token, "0123456789abcdef".repeat(4).
 2f526f04e39c43e8194707c14aafae10d5d5725c:app/src/test/java/com/thomaspeoples/wraithodysseus/auth/AuthRepoTest.kt:generic-api-key:31
+# The recipe's AllowedAPKSigningKeys: a public certificate digest, not a secret.
+# Later edits to that line carry an inline gitleaks:allow instead.
+d20611e20613aeb844a769713ef3b9130e66dc2b:docs/fdroid/com.thomaspeoples.wraithodysseus.yml:generic-api-key:44

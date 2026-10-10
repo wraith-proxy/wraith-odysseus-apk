@@ -54,17 +54,11 @@ no dependency-info block, `UPDATE_CHECK` switch, a linted recipe with
 automatic updates, a literal versionCode and per-versionCode changelogs kept
 by the bump hook, and fastlane screenshots.
 
-- [ ] Open the one fdroiddata merge request (by hand: it is a fork and MR on
-  gitlab.com).
+- [ ] The one fdroiddata merge request.
 - [ ] Bake fdroidserver into the runner image, like the scan tools.
 
-Deferred until after the fdroiddata merge request:
-
-- **Reproducible builds.** These need an unsigned build and the build-tools
-  34 apksigner (an image rebuild). They also need back the build settings the
-  bootstrap left out: `aaptOptions.cruncherEnabled = false`,
-  `generatedDensities()`, `vcsInfo` off, and the ArtProfile task disabled.
-- `AllowedAPKSigningKeys` and `Binaries:`, so F-Droid ships this project's
-  signature. Needs the reproducible build above.
-- An F-Droid-signed build cannot replace an Obtainium install without an
-  uninstall. The listing says so; the signature fix is the item above.
+- [x] Reproducible builds: F-Droid's build image reproduces the CI APK, so
+  the recipe ships this project's signature (`Binaries:`,
+  `AllowedAPKSigningKeys`).
+- [ ] A CI job that runs F-Droid's build image against each release, so a
+  release that stops reproducing is caught here, not by F-Droid.
