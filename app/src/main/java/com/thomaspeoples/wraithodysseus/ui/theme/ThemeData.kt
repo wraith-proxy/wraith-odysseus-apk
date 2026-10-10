@@ -30,8 +30,8 @@ data class PresetDefaults(
     val frosted: Boolean = false,
 )
 
-/** What GET /api/prefs/theme holds: the theme's name and its colours. */
-data class StoredTheme(val name: String, val colors: ThemeColors)
+/** What GET /api/prefs/theme holds: the theme's name, its colours and its font and background pattern. */
+data class StoredTheme(val name: String, val colors: ThemeColors, val style: ThemeStyle = ThemeStyle.Default)
 
 /**
  * The web's presets, copied from static/js/theme.js, and the reading of the
@@ -142,8 +142,12 @@ object ThemeData {
         val o = value as? JSONObject ?: return null
         var name = o.optString("name").trim()
         name = RENAMED[name] ?: name
-        RETIRED[name]?.let { return StoredTheme(it, PRESETS.getValue(it)) }
-        parseColors(o.optJSONObject("colors"))?.let { return StoredTheme(name.ifEmpty { DEFAULT_NAME }, it) }
-        return PRESETS[name]?.let { StoredTheme(name, it) }
+        // The font and pattern fields survive a retired name; only the name and colours are replaced.
+        RETIRED[name]?.let { return StoredTheme(it, PRESETS.getValue(it), ThemeStyle.from(o, it)) }
+        parseColors(o.optJSONObject("colors"))?.let {
+            val effective = name.ifEmpty { DEFAULT_NAME }
+            return StoredTheme(effective, it, ThemeStyle.from(o, effective))
+        }
+        return PRESETS[name]?.let { StoredTheme(name, it, ThemeStyle.from(o, name)) }
     }
 }

@@ -99,5 +99,9 @@ object AppPalette {
         current = p
     }
 
-    fun reset() = set(Palette.Default)
+    /** Back to the dark look, font and pattern included (logout, before any theme loads). */
+    fun reset() {
+        set(Palette.Default)
+        AppStyle.reset()
+    }
 }

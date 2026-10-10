@@ -45,6 +45,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.thomaspeoples.wraithodysseus.ui.theme.AppPalette
+import com.thomaspeoples.wraithodysseus.ui.theme.AppStyle
 import com.thomaspeoples.wraithodysseus.ui.theme.CodeStyle
 import com.thomaspeoples.wraithodysseus.ui.theme.Muted
 import com.thomaspeoples.wraithodysseus.ui.theme.OdyColors
@@ -288,7 +289,8 @@ private fun CodeBlock(code: String, onCopy: () -> Unit) {
     Box(Modifier.fillMaxWidth().background(OdyColors.CodeBg, MaterialTheme.shapes.small)) {
         Text(
             code,
-            style = CodeStyle,
+            // Fira Code with the monospace theme font, the platform monospace otherwise.
+            style = CodeStyle.copy(fontFamily = AppStyle.current.font.codeFamily),
             color = OdyColors.CodeFg,
             softWrap = false,
             modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(start = 8.dp, top = 8.dp, bottom = 8.dp, end = 36.dp),

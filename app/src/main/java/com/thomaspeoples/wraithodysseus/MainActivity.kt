@@ -6,9 +6,11 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.DisposableEffect
 import com.thomaspeoples.wraithodysseus.ui.nav.AppNav
 import com.thomaspeoples.wraithodysseus.ui.theme.AppPalette
+import com.thomaspeoples.wraithodysseus.ui.theme.ThemeBackground
 import com.thomaspeoples.wraithodysseus.ui.theme.WraithOdysseusTheme
 
 class MainActivity : ComponentActivity() {
@@ -31,7 +33,10 @@ class MainActivity : ComponentActivity() {
                 onDispose {}
             }
             WraithOdysseusTheme {
-                AppNav()
+                Box {
+                    AppNav()
+                    ThemeBackground()
+                }
             }
         }
     }

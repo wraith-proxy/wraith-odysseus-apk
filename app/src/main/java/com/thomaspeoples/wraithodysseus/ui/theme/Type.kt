@@ -17,21 +17,29 @@ val FiraCode = FontFamily(
     Font(R.font.fira_code_semibold, FontWeight.SemiBold),
 )
 
-private val Body = TextStyle(fontFamily = FiraCode, fontSize = 14.sp)
-private val Label = TextStyle(fontFamily = FiraCode, fontSize = 12.sp)
-private val Title = TextStyle(fontFamily = FiraCode, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+/** The type scale in [family]: the theme's font choice, [FiraCode] by default. */
+fun typographyFor(family: FontFamily): Typography {
+    val body = TextStyle(fontFamily = family, fontSize = 14.sp)
+    val label = TextStyle(fontFamily = family, fontSize = 12.sp)
+    val title = TextStyle(fontFamily = family, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+    return Typography(
+        titleLarge = title,
+        titleMedium = title,
+        titleSmall = title,
+        bodyLarge = body,
+        bodyMedium = body,
+        bodySmall = label,
+        labelLarge = label,
+        labelMedium = label,
+        labelSmall = label.copy(fontSize = 11.sp),
+    )
+}
 
-val Typography = Typography(
-    titleLarge = Title,
-    titleMedium = Title,
-    titleSmall = Title,
-    bodyLarge = Body,
-    bodyMedium = Body,
-    bodySmall = Label,
-    labelLarge = Label,
-    labelMedium = Label,
-    labelSmall = Label.copy(fontSize = 11.sp),
-)
+val Typography = typographyFor(FiraCode)
 
-/** Code blocks and inline code: smaller, with room between lines. */
+/**
+ * Code blocks and inline code: smaller, with room between lines. Fira Code;
+ * [ThemeFont.codeFamily] is the family for the theme's font choice, applied
+ * where the code is rendered as Markdown.
+ */
 val CodeStyle = TextStyle(fontFamily = FiraCode, fontSize = 11.sp, lineHeight = 16.5.sp)
