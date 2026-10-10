@@ -6,6 +6,8 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.thomaspeoples.wraithodysseus.ui.common.userMessage
+import java.time.Instant
+import java.time.ZoneId
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
@@ -34,6 +36,10 @@ class TasksViewModel(private val api: TasksApi) : ViewModel() {
     var parsing by mutableStateOf(false); private set
     var draft by mutableStateOf<TaskDraft?>(null); private set
     var creating by mutableStateOf(false); private set
+
+    /** The task whose editor is open, and whether its save is in flight. */
+    var editing by mutableStateOf<Task?>(null); private set
+    var saving by mutableStateOf(false); private set
 
     /** One-shot snackbar texts. */
     val messages = MutableSharedFlow<String>(extraBufferCapacity = 4)
@@ -107,6 +113,35 @@ class TasksViewModel(private val api: TasksApi) : ViewModel() {
     }
 
     fun closeHistory() { history = null }
+
+    fun edit(t: Task) { editing = t }
+
+    fun closeEdit() { if (!saving) editing = null }
+
+    /**
+     * Saves [form] as the web's Edit does, then re-lists: a changed schedule
+     * moves next_run, which only the server computes. The editor stays open
+     * with the typed values when the save fails.
+     */
+    fun saveEdit(form: TaskForm, zone: ZoneId = ZoneId.systemDefault(), now: Instant = Instant.now()) {
+        val t = editing ?: return
+        if (saving) return
+        saving = true
+        viewModelScope.launch {
+            try {
+                api.update(t.id, TasksApi.updateBody(t, form, zone, now))
+                editing = null
+                messages.tryEmit("Updated: ${form.name.trim().ifEmpty { t.name }}")
+                tasks = api.list()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                messages.tryEmit(userMessage(e))
+            } finally {
+                saving = false
+            }
+        }
+    }
 
     /** Sends the description for parsing; the result is [draft], to be confirmed. */
     fun parse(description: String) {

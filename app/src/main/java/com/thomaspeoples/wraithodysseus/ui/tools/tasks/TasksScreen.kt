@@ -69,8 +69,16 @@ fun TasksScreen(env: ToolEnv) {
 
     LaunchedEffect(vm) { vm.messages.collect { snackbar.showSnackbar(it) } }
     BackHandler(enabled = vm.history != null) { vm.closeHistory() }
+    // The server answers 403 to a non-admin saving an action that runs code on the host; with
+    // auth switched off everyone is admin (task_action_policy.py owner_has_admin_task_privileges).
+    val isAdmin = env.status?.let { it.isAdmin || !it.configured } == true
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding()) {
+        val editing = vm.editing
+        if (editing != null) {
+            TaskEditor(editing, saving = vm.saving, onSave = vm::saveEdit, onCancel = vm::closeEdit)
+            return@Column
+        }
         val history = vm.history
         if (history != null) {
             HistoryView(history, onBack = vm::closeHistory)
@@ -107,6 +115,7 @@ fun TasksScreen(env: ToolEnv) {
     sheet?.let { t ->
         val actions = buildList {
             if (t.canRun) add(SheetAction("Run now", Lucide.Play) { vm.runNow(t) })
+            if (t.canEdit(isAdmin)) add(SheetAction("Edit", Lucide.Pencil) { vm.edit(t) })
             if (t.status == "active") add(SheetAction("Pause", Lucide.Square) { vm.pause(t) })
             if (t.status == "paused") add(SheetAction("Resume", Lucide.Play) { vm.resume(t) })
             add(SheetAction("History", Lucide.Clock) { vm.openHistory(t) })

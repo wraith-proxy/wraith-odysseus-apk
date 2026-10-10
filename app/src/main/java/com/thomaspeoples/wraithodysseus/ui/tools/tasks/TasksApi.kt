@@ -7,6 +7,7 @@ import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZoneOffset
+import java.time.temporal.ChronoUnit
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
@@ -22,6 +23,8 @@ data class Task(
     val prompt: String,
     /** "llm", "research" or "action". */
     val taskType: String,
+    /** The built-in action an "action" task runs, e.g. "memory_cleanup"; null for prompt tasks. */
+    val action: String?,
     /** "once", "daily", "weekly", "monthly" or "cron"; null for event and webhook tasks. */
     val schedule: String?,
     /** HH:MM in UTC: the server computes schedules in UTC and the web UI converts for display. */
@@ -46,7 +49,23 @@ data class Task(
 ) {
     /** The web hides "Run now" on a finished one-off. */
     val canRun: Boolean get() = status != "completed"
+
+    /** Prompt and research tasks have a prompt to edit; an action task's prompt is its action's own settings. */
+    val editsPrompt: Boolean get() = taskType == "llm" || taskType == "research"
+
+    /**
+     * Whether the person may edit this task. The web shows Edit on every
+     * task and the server (task_routes.py update_task ->
+     * _require_admin_for_task_action) answers 403 for the actions that run
+     * code on the host unless the caller is an admin, so those get no Edit
+     * rather than a form that cannot be saved.
+     */
+    fun canEdit(isAdmin: Boolean): Boolean =
+        isAdmin || !(taskType == "action" && action in ADMIN_ONLY_ACTIONS)
 }
+
+/** src/task_action_policy.py ADMIN_ONLY_TASK_ACTIONS. */
+private val ADMIN_ONLY_ACTIONS = setOf("run_local", "run_script", "ssh_command", "cookbook_serve")
 
 /** An item of GET /api/tasks/{id}/runs. */
 data class TaskRun(
@@ -108,6 +127,18 @@ class TasksApi(private val http: Http) {
         checkBody(http.call(Request.Builder().url(url).delete().build()))
     }
 
+    /**
+     * PUT /api/tasks/{id}, the web's _updateTask. A PUT sets the same fields
+     * again, so a dropped connection may be retried. The answer is the task as
+     * saved.
+     */
+    suspend fun update(id: String, body: JSONObject): Task {
+        val request = Request.Builder().url(http.url("/api/tasks/$id")).put(json(body.toString())).build()
+        val text = http.call(request)
+        checkBody(text)
+        return parseTask(JSONObject(text)) ?: throw ApiException(200, "Unexpected response")
+    }
+
     suspend fun runs(id: String, limit: Int = 20): List<TaskRun> {
         val arr = JSONObject(get("/api/tasks/$id/runs?limit=$limit")).optJSONArray("runs") ?: return emptyList()
         return (0 until arr.length()).mapNotNull { parseRun(arr.optJSONObject(it)) }
@@ -162,6 +193,7 @@ class TasksApi(private val http: Http) {
                 name = o.str("name").orEmpty(),
                 prompt = o.str("prompt").orEmpty(),
                 taskType = o.str("task_type") ?: "llm",
+                action = o.str("action"),
                 schedule = o.str("schedule"),
                 scheduledTime = o.str("scheduled_time"),
                 scheduledDay = if (o.isNull("scheduled_day")) null else o.optInt("scheduled_day"),
@@ -244,11 +276,78 @@ class TasksApi(private val http: Http) {
          * once task with no usable future date as already completed (it never
          * runs), so the confirm step refuses it rather than failing silently.
          */
-        fun onceProblem(draft: TaskDraft, zone: ZoneId, now: Instant): String? {
-            if (draft.schedule != "once") return null
-            val iso = localDateTimeToUtcIso(draft.scheduledDate, zone)
+        fun onceProblem(draft: TaskDraft, zone: ZoneId, now: Instant): String? =
+            onceProblem(draft.schedule, draft.scheduledDate, zone, now)
+
+        /** [onceProblem] for any local "YYYY-MM-DDTHH:MM" date, so the editor checks what the draft step checks. */
+        fun onceProblem(schedule: String, localDate: String?, zone: ZoneId, now: Instant): String? {
+            if (schedule != "once") return null
+            val iso = localDateTimeToUtcIso(localDate, zone)
                 ?: return "This task has no readable date, so it would never run."
             return if (Instant.parse(iso) <= now) "That date has already passed, so the task would never run." else null
+        }
+
+        /**
+         * The PUT /api/tasks/{id} body of an edit, built like the web form's
+         * save (tasks.js _showForm): the same keys and the same conversions as
+         * [createBody] (local time to UTC "HH:MM", a "once" date as a UTC ISO
+         * instant, weekday and cron left as typed). A blank name is left out so
+         * the server keeps the old one. What the editor does not show (model,
+         * chain, persona, notifications, output) is left out too, and the
+         * server only changes what a PUT names. An action task sends no
+         * task_type or prompt: the web re-sends them only to change the
+         * action, and sending them would re-seal the task's authority for
+         * nothing.
+         */
+        fun updateBody(task: Task, f: TaskForm, zone: ZoneId, now: Instant): JSONObject {
+            val o = JSONObject().put("trigger_type", task.triggerType)
+            f.name.trim().takeIf { it.isNotEmpty() }?.let { o.put("name", it) }
+            if (task.editsPrompt) o.put("task_type", task.taskType).put("prompt", f.prompt.trim())
+            when (task.triggerType) {
+                "schedule" -> {
+                    o.put("schedule", f.schedule)
+                    if (f.schedule == "cron") {
+                        o.put("cron_expression", f.cron.trim())
+                    } else {
+                        o.put("scheduled_time", localTimeToUtc(f.time, zone, now))
+                        when (f.schedule) {
+                            "weekly" -> o.put("scheduled_day", f.day.trim().toIntOrNull()?.takeIf { it in 0..6 } ?: 0)
+                            "monthly" -> f.day.trim().toIntOrNull()?.let { o.put("scheduled_day", it) }
+                            "once" -> localDateTimeToUtcIso("${f.date}T${f.time}", zone)?.let { o.put("scheduled_date", it) }
+                        }
+                    }
+                }
+                "event" -> {
+                    task.triggerEvent?.let { o.put("trigger_event", it) }
+                    f.count.trim().toIntOrNull()?.let { o.put("trigger_count", it) }
+                }
+            }
+            return o
+        }
+
+        /**
+         * Why the edit cannot be saved, or null: the web form's own checks
+         * (a prompt, a cron expression, an event count) plus the day of the
+         * month the form's number box limits, and [onceProblem] for a "once"
+         * date the person has set. A once task whose date was not touched is
+         * let through, so a finished one-off can still be renamed.
+         */
+        fun editProblem(task: Task, f: TaskForm, zone: ZoneId, now: Instant): String? {
+            if (task.editsPrompt && f.prompt.isBlank()) return "Prompt is required"
+            when (task.triggerType) {
+                "schedule" -> when (f.schedule) {
+                    "cron" -> if (f.cron.isBlank()) return "Cron expression is required"
+                    "monthly" -> if (f.day.trim().toIntOrNull() !in 1..31) return "Day of month must be 1 to 31"
+                    "once" -> {
+                        val iso = localDateTimeToUtcIso("${f.date}T${f.time}", zone)
+                        val before = parseInstant(task.scheduledDate)?.truncatedTo(ChronoUnit.MINUTES)
+                        val unchanged = task.schedule == "once" && iso != null && before == Instant.parse(iso).truncatedTo(ChronoUnit.MINUTES)
+                        if (!unchanged) onceProblem("once", "${f.date}T${f.time}", zone, now)?.let { return it }
+                    }
+                }
+                "event" -> if (f.count.trim().toIntOrNull() !in 1..1000) return "Every N occurrences must be 1 to 1000"
+            }
+            return null
         }
 
         /** "07:30" local to "HH:MM" UTC, using today's offset as the web does. */
