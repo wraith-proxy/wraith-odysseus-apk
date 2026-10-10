@@ -1,3 +1,9 @@
+## android-0.3.0 (2026-10-10)
+
+### Features
+
+- automate F-Droid releases
+
 ## android-0.2.0 (2026-10-10)
 
 ### Bug Fixes

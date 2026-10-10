@@ -1,0 +1,2 @@
+Features:
+- automate F-Droid releases
