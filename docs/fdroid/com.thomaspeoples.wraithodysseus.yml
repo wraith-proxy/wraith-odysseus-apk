@@ -41,7 +41,7 @@ Builds:
     gradle:
       - yes
 
-AllowedAPKSigningKeys: 76a8f103feb1f229049f167cb7ee224b7f2b4123a364bd1591b6184930f1d5bc
+AllowedAPKSigningKeys: 76a8f103feb1f229049f167cb7ee224b7f2b4123a364bd1591b6184930f1d5bc  # gitleaks:allow (public cert digest)
 
 AutoUpdateMode: Version
 UpdateCheckMode: Tags ^android-[0-9.]+$
