@@ -1,0 +1,5 @@
+{"items":[
+{"id":"a1","filename":"0123456789ab.jpg","url":"/api/generated-image/0123456789ab.jpg","prompt":"IMG_0001","caption":"","model":"imported","favorite":true,"album_id":"alb1","width":4000,"height":3000,"file_size":2048000,"created_at":"2026-10-08T10:00:00","taken_at":"2026-10-01T09:30:00","tags":"","ai_tags":""},
+{"id":"b2","filename":"ba9876543210.mp4","url":"/api/generated-image/ba9876543210.mp4","prompt":"clip","favorite":false,"album_id":null,"width":null,"height":null,"file_size":null,"created_at":null,"taken_at":null},
+{"filename":"noid.png"}
+],"total":130,"total_tagged":2,"tags":["x"],"models":["imported"]}

@@ -1,0 +1,23 @@
+{
+  "uid": "2001",
+  "folder": "INBOX",
+  "message_id": "<m2001@example.com>",
+  "subject": "Invoice",
+  "from_name": "Dana Kim",
+  "from_address": "dana@example.com",
+  "to": "alice@example.com, \"Doe, Bob\" <bob@example.com>",
+  "cc": "carol@example.com",
+  "date": "2026-10-08T09:30:00+00:00",
+  "references": "",
+  "body": "See attached.",
+  "body_html": "<p style=\"color:red\">See <b>attached</b></p><img src=\"cid:logo@x\">",
+  "attachments": [
+    {"index": 0, "filename": "invoice.pdf", "content_type": "application/pdf", "size": 52000, "is_inline": false, "content_id": ""},
+    {"index": 1, "filename": "image001.png", "content_type": "image/png", "size": 900, "is_inline": true, "content_id": "logo@x"}
+  ],
+  "related_attachments": [
+    {"index": 0, "filename": "old.docx", "content_type": "application/msword", "size": 10, "is_inline": false, "content_id": "", "source_uid": "1900", "source_folder": "INBOX"}
+  ],
+  "attachments_deferred": false,
+  "mark_seen_failed": false
+}

@@ -1,0 +1,1 @@
+{"success":true,"draft":{"task_type":"research","name":"Weekday AI news","prompt":"Research the top AI news and summarise it","schedule":"cron","cron_expression":"0 7 * * 1-5","scheduled_time":"07:00","output_target":"email","trigger_type":"schedule"}}

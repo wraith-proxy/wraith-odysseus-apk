@@ -1,0 +1,18 @@
+: Shapes of the source-bearing events, as the live server emits them.
+: rag_sources: routes/chat_routes.py:3787 (data = ctx.rag_sources; the web reads filename, similarity, snippet: chatRenderer.js:1620)
+data: {"type": "rag_sources", "data": [{"filename": "notes.md", "similarity": 0.8123, "snippet": "Tailscale is used for"}]}
+
+: web_sources: routes/chat_routes.py:3790 and src/agent_loop.py:33899 (data = list of title/url; chatRenderer.js:1590)
+data: {"type": "web_sources", "data": [{"title": "Tailscale docs", "url": "https://www.tailscale.com/kb/1017"}, {"title": "", "url": "https://example.org/a/b"}]}
+
+: memories_used: routes/chat_routes.py:3794 (data = ctx.used_memories; type is pinned or recalled: chatRenderer.js:2429)
+data: {"type": "memories_used", "data": [{"type": "pinned", "text": "Prefers metric units"}, {"type": "recalled", "text": "Lives in Lisbon"}, {"type": "pinned", "text": "Uses Fedora"}]}
+
+: research_sources: routes/chat_routes.py:3905
+data: {"type": "research_sources", "data": [{"title": "Paper A", "url": "https://arxiv.org/abs/1"}]}
+
+: research_findings: routes/chat_routes.py:3909 (url, title, summary: chatRenderer.js:1654)
+data: {"type": "research_findings", "data": [{"url": "https://arxiv.org/abs/1", "title": "Paper A", "summary": "It finds X."}]}
+
+data: [DONE]
+

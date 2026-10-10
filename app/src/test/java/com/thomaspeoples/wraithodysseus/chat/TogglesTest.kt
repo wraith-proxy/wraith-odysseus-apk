@@ -8,6 +8,15 @@ import org.junit.Test
 class TogglesTest {
 
     @Test
+    fun planOffReturnsToChatMode() {
+        val on = Toggles().togglePlan()
+        assertTrue(on.agentMode)
+        assertEquals(Toggles(), on.togglePlan())
+        assertFalse(on.togglePlan().agentMode)
+        assertEquals(Toggles(), on.toggleAgent())
+    }
+
+    @Test
     fun terminalImpliesAgent() {
         assertEquals(Toggles(agent = true, terminal = true), Toggles().toggleTerminal())
     }

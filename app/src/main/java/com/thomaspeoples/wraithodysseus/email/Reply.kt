@@ -27,7 +27,7 @@ fun niceDate(iso: String, zone: ZoneId = ZoneId.systemDefault()): String =
 fun quotedBody(original: EmailMessage, zone: ZoneId = ZoneId.systemDefault()): String {
     val from = if (original.fromName.isBlank()) original.fromAddress
     else "${original.fromName} <${original.fromAddress}>"
-    val quoted = original.body.lines().joinToString("\n") { "> $it" }
+    val quoted = quoteText(original).lines().joinToString("\n") { "> $it" }
     return "\n\n$REPLY_SEPARATOR\nOn ${niceDate(original.date, zone)}, $from wrote:\n$quoted"
 }
 

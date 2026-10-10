@@ -115,6 +115,16 @@ class EmailApiTest {
     }
 
     @Test
+    fun unreadPageSendsRefreshOnlyWhenAsked() = runBlocking {
+        reply("email_list_empty.json")
+        api.unreadPage("acc-home", 0, refresh = true)
+        assertEquals("1", server.takeRequest().requestUrl!!.queryParameter("refresh"))
+        reply("email_list_empty.json")
+        api.unreadPage("acc-home", 0)
+        assertNull(server.takeRequest().requestUrl!!.queryParameter("refresh"))
+    }
+
+    @Test
     fun theFallbackPassSendsNoAccountId() = runBlocking {
         reply("email_list_empty.json")
         val page = api.unreadPage(null, 0)

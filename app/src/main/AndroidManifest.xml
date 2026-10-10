@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- The only permission. No notifications, no storage: attachments come
          through the system Photo Picker and document picker, which need
-         none. -->
+         none, and a received attachment is opened from the app's own cache
+         through the FileProvider below. -->
     <uses-permission android:name="android.permission.INTERNET" />
 
     <!-- usesCleartextTraffic is on so a server on a home LAN or a Tailscale
@@ -20,7 +22,8 @@
         android:label="@string/app_name"
         android:theme="@style/Theme.WraithOdysseus"
         android:usesCleartextTraffic="true"
-        android:supportsRtl="true">
+        android:supportsRtl="true"
+        tools:ignore="DataExtractionRules">
 
         <activity
             android:name=".MainActivity"
@@ -31,6 +34,18 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Hands one cached attachment to the app that opens it. Not
+             exported: access is granted per intent, for that one file. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
     </application>
 </manifest>

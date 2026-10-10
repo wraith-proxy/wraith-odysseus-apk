@@ -1,0 +1,17 @@
+: Types other panels own; the reducer leaves the turn untouched.
+data: {"type": "doc_stream_open", "doc_id": "d1"}
+
+data: {"type": "doc_stream_delta", "delta": "x"}
+
+data: {"type": "doc_update", "data": {}}
+
+data: {"type": "doc_suggestions", "data": []}
+
+data: {"type": "email_open", "uid": "5"}
+
+data: {"type": "ui_control", "data": {"results": "ok"}}
+
+data: {"type": "audit_log", "data": {}}
+
+data: [DONE]
+

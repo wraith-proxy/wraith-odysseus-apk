@@ -24,7 +24,7 @@ class NavRulesTest {
 
     @Test
     fun `live cookie starts at chats`() {
-        assertEquals(Routes.CHATS, startRoute(SessionCookie("v", now + 1, true), now))
+        assertEquals(Routes.HOME, startRoute(SessionCookie("v", now + 1, true), now))
     }
 
     @Test

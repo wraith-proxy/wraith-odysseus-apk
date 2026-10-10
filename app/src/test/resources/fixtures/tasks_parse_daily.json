@@ -1,0 +1,1 @@
+{"success":true,"draft":{"task_type":"llm","name":"Stretch reminder","prompt":"Remind me to stretch","schedule":"daily","scheduled_time":"7:30","trigger_type":"schedule"}}

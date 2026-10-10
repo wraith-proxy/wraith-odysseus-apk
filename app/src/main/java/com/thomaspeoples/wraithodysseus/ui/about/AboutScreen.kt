@@ -32,6 +32,8 @@ import com.thomaspeoples.wraithodysseus.BuildConfig
 import com.thomaspeoples.wraithodysseus.R
 import com.thomaspeoples.wraithodysseus.ui.theme.CodeStyle
 import com.thomaspeoples.wraithodysseus.ui.theme.Muted
+import com.thomaspeoples.wraithodysseus.ui.theme.themeBackground
+import androidx.compose.ui.graphics.Color
 
 private const val REPO_URL = "https://git.thomaspeoples.com/thomaspeoples/wraith-odysseus-apk"
 
@@ -43,14 +45,16 @@ private val libraries = listOf(
     "OkHttp" to "Apache-2.0",
     "Kotlin standard library and kotlinx.coroutines" to "Apache-2.0",
     "commonmark-java" to "BSD-2-Clause",
-    "Material icons (including the hand-drawn chat bubble)" to "Apache-2.0",
+    "Material icons" to "Apache-2.0",
+    "Lucide icons (licence text in assets/licenses/Lucide-ISC.txt)" to "ISC",
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AboutScreen(onBack: () -> Unit) {
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+        modifier = Modifier.themeBackground(MaterialTheme.colorScheme.background),
+        containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.menu_about)) },

@@ -1,0 +1,7 @@
+{"research":[
+ {"id":"rp-aaa111","query":"Best home NAS for Plex","category":"product","mode":"research","source_count":14,"status":"done","duration":"4m 12s","rounds":"6","started_at":1760000000.5,"completed_at":1760000252.0,"archived":false,"thumbnail":"https://example.com/t.png"},
+ {"id":"rp-bbb222","query":"Is intermittent fasting safe","category":"","mode":"research","source_count":0,"status":"done","duration":"1m","rounds":"2","started_at":1750000000,"completed_at":1750000060,"archived":false,"thumbnail":""},
+ {"id":"rp-ccc333","query":"Explain TCP slow start","category":"","mode":"explain","source_count":0,"status":"done","duration":"20s","rounds":"","started_at":1740000000,"completed_at":1740000020,"archived":false,"thumbnail":""},
+ {"id":"rp-ddd444","query":"Half written","category":"","mode":"research","source_count":3,"status":"error","duration":"","rounds":"","started_at":0,"completed_at":0,"archived":false,"thumbnail":""},
+ {"query":"No id, dropped","status":"done"}
+],"total":5}

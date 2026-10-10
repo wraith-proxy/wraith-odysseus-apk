@@ -1,0 +1,6 @@
+[
+ {"id":"ep1","name":"Local","base_url":"http://x","is_enabled":true,"model_type":"llm","models":["zeta","Alpha"]},
+ {"id":"ep2","name":"Cloud","base_url":"http://y","is_enabled":true,"models":["Alpha","beta"]},
+ {"id":"ep3","name":"Off","base_url":"http://z","is_enabled":false,"model_type":"llm","models":["hidden"]},
+ {"id":"ep4","name":"Images","base_url":"http://w","is_enabled":true,"model_type":"image","models":["sdxl"]}
+]

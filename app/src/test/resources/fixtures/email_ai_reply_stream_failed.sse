@@ -1,0 +1,4 @@
+data: {"type": "reply", "text": "Okay, let me think"}
+
+data: {"type": "result", "success": false, "error": "AI reply failed (arthur:latest@host.docker.internal:11434): Model returned analysis or an incomplete reply, not a finished email"}
+

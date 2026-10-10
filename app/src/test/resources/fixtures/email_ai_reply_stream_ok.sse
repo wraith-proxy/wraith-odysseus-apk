@@ -1,0 +1,8 @@
+data: {"type": "reply", "text": "Hi Sam,"}
+
+data: {"type": "reply", "text": "Hi Sam,\n\nThursday works"}
+
+data: {"type": "reply", "text": "Hi Sam,\n\nThursday works for me."}
+
+data: {"type": "result", "success": true, "reply": "Hi Sam,\n\nThursday works for me.\n\nThomas", "model_used": "arthur:latest"}
+

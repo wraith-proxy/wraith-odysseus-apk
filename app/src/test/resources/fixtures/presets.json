@@ -1,0 +1,1 @@
+{"code_analyze": {"name": "Code Analyze", "temperature": 0.2, "max_tokens": 8000, "system_prompt": "x"}, "brainstorm": {"name": "Brainstorm", "temperature": 0.9}, "custom": {"name": "Custom", "temperature": 1.0, "enabled": false}}

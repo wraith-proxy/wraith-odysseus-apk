@@ -54,7 +54,9 @@ your Odysseus server  (stock 1.0.3, cookie session, no server changes)
   +-----------------------------------------------------------+
 ```
 
-Two tabs, Chats and Email, with About, FAQ and Log out in the overflow menu.
+Laid out like the web UI: a chat is the home screen, and a drawer from the
+right (its sidebar) holds New Chat, Search, the chats, Email, the Tools and
+Settings. Tools the app does not have yet open the web UI instead.
 If the server ends the session early, the login screen opens over whatever
 you were doing and returns you there once you log in again as the same
 account.

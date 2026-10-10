@@ -1,0 +1,8 @@
+data: {"type": "reply", "text": "Dear"}
+
+data: {"type": "reply", "text": ""}
+
+data: {"type": "reply", "text": "Hi Sam, yes."}
+
+data: {"type": "result", "success": true, "reply": "Hi Sam, yes, that is fine with me.", "model_used": "arthur:latest"}
+

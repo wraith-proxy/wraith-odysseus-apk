@@ -6,7 +6,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.DisposableEffect
 import com.thomaspeoples.wraithodysseus.ui.nav.AppNav
+import com.thomaspeoples.wraithodysseus.ui.theme.AppPalette
 import com.thomaspeoples.wraithodysseus.ui.theme.WraithOdysseusTheme
 
 class MainActivity : ComponentActivity() {
@@ -21,6 +23,13 @@ class MainActivity : ComponentActivity() {
         )
         super.onCreate(savedInstanceState)
         setContent {
+            // The bars' icons follow the theme: dark icons on a light one.
+            val light = AppPalette.current.isLight
+            DisposableEffect(light) {
+                val style = if (light) SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT) else SystemBarStyle.dark(Color.TRANSPARENT)
+                enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
+                onDispose {}
+            }
             WraithOdysseusTheme {
                 AppNav()
             }

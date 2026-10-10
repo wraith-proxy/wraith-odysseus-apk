@@ -56,6 +56,12 @@ class AuthRepoTest {
         val user = AuthRepo.parseStatus(fixture("auth_status_authenticated_user.json"))
         assertFalse(user.isAdmin)
         assertFalse(user.canUseBash)
+        // Only can_* keys set to false count; allowed_models_restricted: false
+        // is a setting, not a denial.
+        assertEquals(setOf("can_use_bash"), user.denied)
+        assertTrue(user.allows("can_use_research"))
+        assertFalse(user.allows("can_use_bash"))
+        assertFalse(AuthRepo.parseStatus("""{"privileges": {"can_manage_memory": false}}""").allows("can_manage_memory"))
 
         val anon = AuthRepo.parseStatus(fixture("auth_status_anonymous.json"))
         assertFalse(anon.authenticated)
@@ -182,5 +188,51 @@ class AuthRepoTest {
         server.shutdown()
         repo.logout()
         assertNull(session.cookie)
+    }
+
+    // -- account ----------------------------------------------------------
+
+    @Test
+    fun changePasswordPostsJsonWithBothPasswords() = runBlocking {
+        server.enqueue(MockResponse().setBody("""{"ok": true}"""))
+        repo.changePassword("old pw", "new pw 123")
+        val req = server.takeRequest()
+        assertEquals("POST", req.method)
+        assertEquals("/api/auth/change-password", req.path)
+        assertTrue(req.getHeader("Content-Type").orEmpty().startsWith("application/json"))
+        val body = JSONObject(req.body.readUtf8())
+        assertEquals("old pw", body.getString("current_password"))
+        assertEquals("new pw 123", body.getString("new_password"))
+    }
+
+    @Test
+    fun changePasswordShowsTheServersOwnWords() = runBlocking {
+        server.enqueue(json(400, "change_password_400_wrong.json"))
+        server.enqueue(json(400, "change_password_400_short.json"))
+        val wrong = runCatching { repo.changePassword("x", "longenough") }.exceptionOrNull() as com.thomaspeoples.wraithodysseus.net.ApiException
+        assertEquals("Current password is incorrect", wrong.message)
+        val short = runCatching { repo.changePassword("x", "abc") }.exceptionOrNull() as com.thomaspeoples.wraithodysseus.net.ApiException
+        assertEquals("Password must be at least 8 characters", short.message)
+        // Never sent twice behind the user's back.
+        assertEquals(2, server.requestCount)
+    }
+
+    @Test
+    fun totpStatusIsReadFromTheStatusEndpoint() = runBlocking {
+        server.enqueue(json(200, "totp_status_on.json"))
+        server.enqueue(MockResponse().setBody("""{"enabled": false}"""))
+        assertTrue(repo.totpEnabled())
+        assertEquals("/api/auth/2fa/status", server.takeRequest().path)
+        assertFalse(repo.totpEnabled())
+        assertTrue(AuthRepo.parseTotpStatus(fixture("totp_status_on.json")))
+        assertFalse(AuthRepo.parseTotpStatus("{}"))
+    }
+
+    @Test
+    fun theFormChecksOnlyWhatTheServerCannotSay() {
+        assertEquals("Enter your current password", ChangePasswordForm("", "a", "a").problem())
+        assertEquals("Enter a new password", ChangePasswordForm("x", "", "").problem())
+        assertEquals("The new passwords do not match", ChangePasswordForm("x", "abc", "abd").problem())
+        assertNull(ChangePasswordForm("x", "abc", "abc").problem())
     }
 }

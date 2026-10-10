@@ -1,0 +1,8 @@
+{"jobs":[
+ {"id":"job_run1","tool":"research","query":"grey cat breeds","status":"running","rounds":3,
+  "progress":{"phase":"searching","round":2,"queries":4,"total_sources":11,"total_findings":3}},
+ {"id":"job_done1","tool":"research","query":"old topic","status":"delivered","rounds":2,"source_count":7,"outcome":"complete",
+  "message":{"role":"assistant","content":"Here is what I found","metadata":{"_db_id":"m-9"}}},
+ {"id":"job_bad1","tool":"research","query":"empty topic","status":"ready","rounds":2,"source_count":0,"outcome":"no_sources"},
+ {"tool":"research","status":"running"}
+]}

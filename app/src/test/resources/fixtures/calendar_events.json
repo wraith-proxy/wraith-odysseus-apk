@@ -1,0 +1,9 @@
+{"events":[
+{"uid":"u-allday","summary":"Holiday","dtstart":"2026-10-12","dtend":"2026-10-14","all_day":true,"is_utc":false,"description":"","location":"","rrule":"","recurrence_exdates":[],"calendar":"Personal","calendar_href":"cal-1","color":"#5b8abf","is_recurrence":false,"series_uid":"u-allday","truncated":false},
+{"uid":"u-zero","summary":"Zero length","dtstart":"2026-10-15","dtend":"2026-10-15","all_day":true,"description":null,"location":null,"rrule":"","calendar":"Personal","calendar_href":"cal-1","color":"","is_recurrence":false},
+{"uid":"u-utc","summary":"Dentist","dtstart":"2026-10-13T08:30:00Z","dtend":"2026-10-13T09:30:00Z","all_day":false,"is_utc":true,"description":"Bring forms","location":"High St","rrule":"","calendar":"Work","calendar_href":"cal-2","color":"bg:/uploads/x.png","is_recurrence":false,"series_uid":"u-utc"},
+{"uid":"u-naive","summary":"Old event","dtstart":"2026-10-13T18:00:00","dtend":"2026-10-13T19:00:00","all_day":false,"is_utc":false,"calendar_href":"cal-1","is_recurrence":false},
+{"uid":"ser-1::2026-10-13T09:00","summary":"Standup","dtstart":"2026-10-13T09:00:00Z","dtend":"2026-10-13T09:15:00Z","all_day":false,"is_utc":true,"rrule":"FREQ=DAILY","calendar_href":"cal-2","is_recurrence":true,"series_uid":"ser-1"},
+{"uid":"ser-2::2026-10-14","summary":"Bins","dtstart":"2026-10-14","dtend":"2026-10-15","all_day":true,"rrule":"FREQ=WEEKLY","calendar_href":"cal-1","is_recurrence":true,"series_uid":"ser-2"},
+{"uid":"bad","summary":"No times"}
+],"truncated":true}

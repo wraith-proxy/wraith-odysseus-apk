@@ -1,0 +1,5 @@
+{"runs":[
+{"id":"r1","task_id":"t1","started_at":"2026-10-09T06:00:00Z","finished_at":"2026-10-09T06:00:12Z","status":"success","result":"Top story: ...","error":null,"tokens_used":812,"model":"openai/gpt-x"},
+{"id":"r2","task_id":"t1","started_at":"2026-10-08T06:00:00Z","finished_at":"2026-10-08T06:00:02Z","status":"error","result":null,"error":"Endpoint unreachable","tokens_used":null,"model":null},
+{"id":"r3","task_id":"t1","started_at":"2026-10-07T06:00:00Z","finished_at":null,"status":"running","result":"","error":"","tokens_used":null,"model":"m"}
+],"total":3}

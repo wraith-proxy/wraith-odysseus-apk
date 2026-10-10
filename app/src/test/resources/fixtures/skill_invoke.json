@@ -1,0 +1,1 @@
+{"ok": true, "type": "skill", "name": "summarize", "command": "/summarize", "message": "Apply the skill below to my request.\n\n--- BEGIN SKILL ---\nbody\n--- END SKILL ---\n\nRequest: the notes"}

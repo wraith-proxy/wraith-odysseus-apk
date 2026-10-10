@@ -34,6 +34,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.thomaspeoples.wraithodysseus.R
+import com.thomaspeoples.wraithodysseus.ui.theme.themeBackground
+import androidx.compose.ui.graphics.Color
 
 private val faqEntries: List<Pair<String, String>> = listOf(
     "What is this app?" to
@@ -81,7 +83,8 @@ private val faqEntries: List<Pair<String, String>> = listOf(
 @Composable
 fun FaqScreen(onBack: () -> Unit) {
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+        modifier = Modifier.themeBackground(MaterialTheme.colorScheme.background),
+        containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.menu_faq)) },

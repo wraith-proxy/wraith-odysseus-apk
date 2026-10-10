@@ -1,40 +1,41 @@
 package com.thomaspeoples.wraithodysseus.ui.theme
 
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.lerp
 
 // Odysseus's own dark palette, so the app reads as the same product as the
 // web UI it talks to. Dark only: there is no light scheme to keep in sync.
-val Background = Color(0xFF282C34)
-val Foreground = Color(0xFF9CDEF2)
-val Surface = Color(0xFF111111)
-val Muted = Color(0xFF888888)
-val Outline = Color(0xFF355A66)
-val Primary = Color(0xFFE06C75)
-val Secondary = Color(0xFF6B8A94)
-val Tertiary = Color(0xFF50FA7B)
-val Error = Color(0xFFFF4444)
+// The web theme in force (see Palette): these read it each time, so a theme
+// change repaints everything that uses them. Dark Odysseus is the default.
+val Background: Color get() = AppPalette.current.background
+val Foreground: Color get() = AppPalette.current.foreground
+val Surface: Color get() = AppPalette.current.surface
+val Muted: Color get() = AppPalette.current.muted
+val Outline: Color get() = AppPalette.current.outline
+val Primary: Color get() = AppPalette.current.primary
+val Secondary: Color get() = AppPalette.current.secondary
+val Tertiary: Color get() = AppPalette.current.tertiary
+val Error: Color get() = AppPalette.current.error
 
 /** The web UI's "slightly lifted background" tone, used for raised rows and
  * the user's own chat bubble. */
-val Raised = lerp(Background, Foreground, 0.08f)
+val Raised: Color get() = AppPalette.current.raised
 
 /** App-specific colours Material's scheme has no slot for. */
 object OdyColors {
     val Warn = Color(0xFFF0AD4E)
     val AccentWarm = Color(0xFFD19A66)
 
-    val UserBubble = Raised
-    val AiBubble = Surface
-    val BubbleBorder = Outline
+    val UserBubble: Color get() = AppPalette.current.userBubble
+    val AiBubble: Color get() = AppPalette.current.aiBubble
+    val BubbleBorder: Color get() = AppPalette.current.bubbleBorder
 
-    val InputBg = Surface
-    val SendBtn = Primary
+    val InputBg: Color get() = AppPalette.current.inputBg
+    val SendBtn: Color get() = AppPalette.current.sendBtn
 
-    val CodeBg = Color(0xFF1E2228)
-    val CodeFg = Foreground
+    val CodeBg: Color get() = AppPalette.current.codeBg
+    val CodeFg: Color get() = AppPalette.current.codeFg
 
-    val ThinkingContainer = Primary.copy(alpha = 0.05f)
-    val ThinkingBorder = Primary.copy(alpha = 0.30f)
-    val ThinkingHeader = Primary.copy(alpha = 0.08f)
+    val ThinkingContainer: Color get() = Primary.copy(alpha = 0.05f)
+    val ThinkingBorder: Color get() = Primary.copy(alpha = 0.30f)
+    val ThinkingHeader: Color get() = Primary.copy(alpha = 0.08f)
 }

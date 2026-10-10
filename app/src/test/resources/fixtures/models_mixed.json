@@ -1,0 +1,4 @@
+{"items": [
+ {"url": "http://llm.example.internal:8080/v1/chat/completions", "models": ["org/qwen3-30b-a3b", "llama-3.1-8b"], "models_display": ["org/Qwen3 30B", "Llama 3.1 8B"], "models_extra": [], "models_extra_display": [], "endpoint_id": "ep_local01", "endpoint_name": "Local llama", "category": "local", "model_type": "llm", "models_metadata": {}},
+ {"url": "https://api.example.com/v1/chat/completions", "models": ["gpt-5", "llama-3.1-8b"], "models_display": ["GPT-5", "Llama 3.1 8B"], "models_extra": [], "models_extra_display": [], "endpoint_id": "ep_cloud01", "endpoint_name": "Example Cloud", "category": "api", "model_type": "llm", "models_metadata": {"gpt-5": {"supported_reasoning_levels": ["low", {"effort": "High"}]}}}
+]}

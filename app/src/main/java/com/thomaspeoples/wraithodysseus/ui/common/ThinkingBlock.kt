@@ -33,10 +33,13 @@ import com.thomaspeoples.wraithodysseus.ui.theme.ThinkingShape
 /**
  * The model's reasoning, folded away like the web UI's thinking block. It
  * opens while the model is still only thinking ([active]) and folds itself
- * once the answer starts; a tap toggles it either way.
+ * once the answer starts; a tap toggles it either way. Once it is done the
+ * header reads "View thinking process" with how long it took ([seconds], as
+ * the web prints it), which the caller knows only when it timed the stream
+ * or the server saved it.
  */
 @Composable
-fun ThinkingBlock(text: String, active: Boolean, modifier: Modifier = Modifier) {
+fun ThinkingBlock(text: String, active: Boolean, modifier: Modifier = Modifier, seconds: String? = null) {
     var open by rememberSaveable { mutableStateOf(active) }
     LaunchedEffect(active) { if (!active) open = false }
 
@@ -66,10 +69,12 @@ fun ThinkingBlock(text: String, active: Boolean, modifier: Modifier = Modifier) 
                 modifier = Modifier.rotate(if (open) 90f else 0f).clearAndSetSemantics {},
             )
             Text(
-                if (active) "  Thinking…" else "  Thinking",
+                if (active) "  Thinking…" else "  View thinking process",
                 color = Primary,
                 style = MaterialTheme.typography.labelMedium,
+                modifier = Modifier.weight(1f),
             )
+            if (seconds != null && !active) Text("${seconds}s", color = Muted, style = MaterialTheme.typography.labelSmall)
         }
         if (open) {
             Text(
