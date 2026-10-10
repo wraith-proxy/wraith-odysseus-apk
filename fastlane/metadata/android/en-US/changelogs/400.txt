@@ -1,0 +1,2 @@
+Bug Fixes:
+- one APK for Gitea and F-Droid

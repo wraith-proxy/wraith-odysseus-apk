@@ -1,3 +1,9 @@
+## android-0.4.0 (2026-10-10)
+
+### Bug Fixes
+
+- one APK for Gitea and F-Droid
+
 ## android-0.3.0 (2026-10-10)
 
 ### Features
