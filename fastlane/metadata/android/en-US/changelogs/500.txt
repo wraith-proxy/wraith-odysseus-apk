@@ -1,0 +1,2 @@
+Features:
+- https only, and shrink the release with R8

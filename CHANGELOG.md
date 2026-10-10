@@ -1,3 +1,9 @@
+## android-0.5.0 (2026-10-10)
+
+### Features
+
+- https only, and shrink the release with R8
+
 ## android-0.4.0 (2026-10-10)
 
 ### Bug Fixes
