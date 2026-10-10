@@ -154,19 +154,52 @@ class NotesViewModel(private val api: NotesApi) : ViewModel() {
     fun move(note: Note, by: Int, now: Instant) {
         if (!state.canReorder) return
         val order = state.visible(now).map { it.id }
-        val moved = moveId(order, note.id, by)
-        if (moved == order) return
-        val before = state
+        commitOrder(order, moveId(order, note.id, by))
+    }
+
+    /** The order on screen while a card is being dragged, or null when none is. */
+    var dragOrder by mutableStateOf<List<String>?>(null)
+        private set
+
+    private var dragFrom: List<String> = emptyList()
+    private var dragNow: Instant = Instant.EPOCH
+
+    /** A card's drag handle was grabbed. Only the whole active list can be reordered. */
+    fun dragBegin(now: Instant) {
+        if (!state.canReorder) return
+        dragFrom = state.visible(now).map { it.id }
+        dragNow = now
+        dragOrder = dragFrom
+    }
+
+    /** The dragged card [id] has moved over [overId]: reorder live, within its block. */
+    fun dragOver(id: String, overId: String) {
+        val current = dragOrder ?: return
+        val blocks = state.notes.associate { it.id to orderBlock(it, dragNow) }
+        dragOrder = dragMove(current, { blocks[it] ?: 2 }, id, overId)
+    }
+
+    /** The card was dropped ([drop]) or the drag abandoned: one POST on a drop that changed the order. */
+    fun dragEnd(drop: Boolean) {
+        val moved = dragOrder ?: return
+        dragOrder = null
+        if (drop) commitOrder(dragFrom, moved)
+    }
+
+    /** Show [moved] at once and send it; on failure put [before] back and say why. */
+    private fun commitOrder(before: List<String>, moved: List<String>) {
+        if (moved == before) return
+        val oldState = state
         val position = moved.withIndex().associate { it.value to it.index }
         state = state.copy(notes = state.notes.map { n -> position[n.id]?.let { n.copy(sortOrder = it) } ?: n })
         viewModelScope.launch {
             try {
                 api.reorder(moved)
             } catch (e: ApiException) {
-                state = before
+                state = oldState
                 say.trySend(userMessage(e))
             } catch (e: IOException) {
-                state = before
+                state = oldState
                 say.trySend(userMessage(e))
             }
         }

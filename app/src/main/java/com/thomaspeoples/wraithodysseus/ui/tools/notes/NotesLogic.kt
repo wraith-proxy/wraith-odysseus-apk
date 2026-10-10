@@ -151,3 +151,26 @@ fun moveId(ids: List<String>, id: String, by: Int): List<String> {
 /** The sort_order that puts a saved note above its unpinned siblings (the web's rule). */
 fun topSortOrder(notes: List<Note>, exceptId: String?): Int =
     notes.filter { !it.pinned && it.id != exceptId }.fold(0) { m, n -> minOf(m, n.sortOrder) } - 1
+
+/**
+ * Which block of the list a note belongs to: 0 pinned, 1 reminder due, 2 the rest. [sortNotes]
+ * always puts these blocks in that order whatever the sort_order values say, so a drag that
+ * crossed from one block into another would snap back on the next load.
+ */
+fun orderBlock(n: Note, now: Instant, zone: ZoneId = ZoneId.systemDefault()): Int = when {
+    n.pinned -> 0
+    hasActiveReminder(n, now, zone) -> 1
+    else -> 2
+}
+
+/**
+ * [ids] after dragging [id] over [overId]: [id] takes the place of [overId] and the ones between
+ * shift by one. Unchanged if either is absent, they are the same, or they sit in different
+ * blocks ([blockOf]), since the web's order would put the note straight back.
+ */
+fun dragMove(ids: List<String>, blockOf: (String) -> Int, id: String, overId: String): List<String> {
+    val from = ids.indexOf(id)
+    val to = ids.indexOf(overId)
+    if (from < 0 || to < 0 || from == to || blockOf(id) != blockOf(overId)) return ids
+    return ids.toMutableList().apply { add(to, removeAt(from)) }
+}

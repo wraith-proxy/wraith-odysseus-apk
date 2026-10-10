@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,7 +21,9 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
@@ -41,8 +44,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.listSaver
@@ -54,6 +59,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -107,6 +115,8 @@ fun NotesScreen(env: ToolEnv) {
     var now by remember { mutableStateOf(Instant.now()) }
 
     LaunchedEffect(vm) { vm.messages.collect { snackbar.showSnackbar(it) } }
+    // A drag cut short (rotation, leaving the screen) must not leave the list half-reordered.
+    DisposableEffect(vm) { onDispose { vm.dragEnd(drop = false) } }
     LaunchedEffect(state.notes) { now = Instant.now() }
 
     val open = editing
@@ -122,7 +132,14 @@ fun NotesScreen(env: ToolEnv) {
             searchOpen = false
             vm.setQuery("")
         }
-        val visible = remember(state.notes, state.label, state.query, state.archivedView, now.epochSecond / 60) { state.visible(now) }
+        val sorted = remember(state.notes, state.label, state.query, state.archivedView, now.epochSecond / 60) { state.visible(now) }
+        // While a card is dragged the list follows the drag, not the server's order.
+        val visible = vm.dragOrder?.let { ids ->
+            val byId = sorted.associateBy { it.id }
+            ids.mapNotNull(byId::get)
+        } ?: sorted
+        val listState = rememberLazyListState()
+        val drag = remember { DragState() }
         val tags = remember(state.notes) { allTags(state.notes.filterNot(::isCalendarNote)) }
         val openNote: (Note) -> Unit = { n ->
             if (n.type == "draw") {
@@ -190,12 +207,55 @@ fun NotesScreen(env: ToolEnv) {
                             }
                         }
                         else -> LazyColumn(
+                            state = listState,
                             contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 96.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                             modifier = Modifier.fillMaxSize(),
                         ) {
                             items(visible, key = { it.id }) { n ->
-                                NoteCard(n, now, openNote, { sheetKey = n.id }, vm::toggleItem)
+                                val dragging = drag.id == n.id
+                                NoteCard(
+                                    n, now, openNote, { sheetKey = n.id }, vm::toggleItem,
+                                    modifier = if (dragging) {
+                                        // Held under the finger: draw it where the finger put it, whatever its slot.
+                                        Modifier.zIndex(1f).graphicsLayer {
+                                            val top = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.key == n.id }?.offset
+                                            translationY = if (top == null) 0f else drag.startTop + drag.travel - top
+                                            scaleX = 1.02f
+                                            scaleY = 1.02f
+                                        }
+                                    } else {
+                                        Modifier.animateItem()
+                                    },
+                                    handle = if (state.canReorder && visible.size > 1) {
+                                        Modifier.pointerInput(n.id) {
+                                            detectDragGestures(
+                                                onDragStart = {
+                                                    val top = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.key == n.id }?.offset
+                                                    if (top != null) {
+                                                        drag.begin(n.id, top)
+                                                        vm.dragBegin(now)
+                                                    }
+                                                },
+                                                onDrag = { change, amount ->
+                                                    change.consume()
+                                                    drag.travel += amount.y
+                                                    dragStep(drag, listState, vm)
+                                                },
+                                                onDragEnd = {
+                                                    drag.end()
+                                                    vm.dragEnd(drop = true)
+                                                },
+                                                onDragCancel = {
+                                                    drag.end()
+                                                    vm.dragEnd(drop = false)
+                                                },
+                                            )
+                                        }
+                                    } else {
+                                        null
+                                    },
+                                )
                             }
                         }
                     }
@@ -248,6 +308,56 @@ private fun saveGrid(context: Context, grid: Boolean) {
     }
 }
 
+/**
+ * The card being dragged: where its slot started ([startTop], px in the list) and how far the
+ * finger has gone since ([travel]). The card is drawn at startTop + travel whatever slot it holds,
+ * so it stays under the finger while the others move aside.
+ */
+private class DragState {
+    var id by mutableStateOf<String?>(null)
+        private set
+    var startTop = 0
+        private set
+    var travel by mutableFloatStateOf(0f)
+
+    fun begin(id: String, top: Int) {
+        this.id = id
+        startTop = top
+        travel = 0f
+    }
+
+    fun end() {
+        id = null
+    }
+}
+
+/** How close to the list's edge, in px, the dragged card must get for the list to scroll. */
+private const val EDGE_SCROLL_ZONE = 80
+
+/**
+ * After the finger moved: swap with the neighbour the dragged card has passed the middle of
+ * (its leading edge past the other's midpoint, so a swap never flips straight back), and scroll
+ * when it nears the top or bottom edge.
+ */
+private fun dragStep(drag: DragState, listState: LazyListState, vm: NotesViewModel) {
+    val id = drag.id ?: return
+    val info = listState.layoutInfo
+    val me = info.visibleItemsInfo.firstOrNull { it.key == id } ?: return
+    val top = drag.startTop + drag.travel
+    val bottom = top + me.size
+    val over = info.visibleItemsInfo
+        .filter { it.key != id }
+        .filter { if (it.offset > me.offset) bottom > it.offset + it.size / 2f else top < it.offset + it.size / 2f }
+        .minByOrNull { kotlin.math.abs(it.offset - me.offset) }
+    (over?.key as? String)?.let { vm.dragOver(id, it) }
+    when {
+        top < info.viewportStartOffset + EDGE_SCROLL_ZONE -> listState.dispatchRawDelta(-EDGE_SCROLL_STEP)
+        bottom > info.viewportEndOffset - EDGE_SCROLL_ZONE -> listState.dispatchRawDelta(EDGE_SCROLL_STEP)
+    }
+}
+
+private const val EDGE_SCROLL_STEP = 24f
+
 /** How many checklist rows a card shows before "+N more". */
 private const val CARD_ROWS = 8
 
@@ -259,13 +369,16 @@ private fun NoteCard(
     onOpen: (Note) -> Unit,
     onMenu: () -> Unit,
     onToggle: (Note, Int) -> Unit,
+    modifier: Modifier = Modifier,
+    /** The drag handle's gesture, or null where the card cannot be dragged. */
+    handle: Modifier? = null,
 ) {
     val fill = noteColorRgb(note.color)?.let { Color(0xFF000000.toInt() or it) }
     val ink = if (fill != null) CardText else MaterialTheme.colorScheme.onSurface
     val soft = if (fill != null) CardText.copy(alpha = 0.65f) else Muted
     val shape = RoundedCornerShape(12.dp)
     Column(
-        Modifier
+        modifier
             .fillMaxWidth()
             .clip(shape)
             .background(fill ?: MaterialTheme.colorScheme.surface)
@@ -284,6 +397,11 @@ private fun NoteCard(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f).padding(top = 2.dp),
             )
+            if (handle != null) {
+                Box(Modifier.size(28.dp).then(handle), Alignment.Center) {
+                    Icon(Lucide.Menu, "Drag to reorder", tint = soft, modifier = Modifier.size(18.dp))
+                }
+            }
             Box(Modifier.size(28.dp).clickable(onClick = onMenu), Alignment.Center) {
                 Icon(Lucide.Ellipsis, "Note actions", tint = soft, modifier = Modifier.size(18.dp))
             }

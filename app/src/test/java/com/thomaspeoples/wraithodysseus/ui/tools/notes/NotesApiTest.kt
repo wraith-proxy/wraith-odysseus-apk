@@ -158,7 +158,9 @@ class NotesApiTest {
         val req = server.takeRequest()
         assertEquals("POST", req.method)
         assertEquals("/api/notes/reorder", req.requestUrl!!.encodedPath)
-        assertEquals("""["c","a","b"]""", JSONObject(req.body.readUtf8()).getJSONArray("ids").toString())
+        val body = JSONObject(req.body.readUtf8())
+        assertEquals("""["c","a","b"]""", body.getJSONArray("ids").toString())
+        assertEquals(listOf("ids"), body.keys().asSequence().toList())
     }
 
     @Test

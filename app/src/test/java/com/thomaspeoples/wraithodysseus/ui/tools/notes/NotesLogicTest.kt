@@ -164,4 +164,61 @@ class NotesLogicTest {
         assertEquals(-1, topSortOrder(list, "n1"))
         assertEquals(-1, topSortOrder(emptyList(), null))
     }
+
+    private val ids = listOf("p1", "p2", "r1", "a", "b", "c")
+    private val blocks = mapOf("p1" to 0, "p2" to 0, "r1" to 1, "a" to 2, "b" to 2, "c" to 2)
+    private fun drag(id: String, over: String, list: List<String> = ids) = dragMove(list, { blocks.getValue(it) }, id, over)
+
+    @Test
+    fun draggingDownTakesTheTargetsPlaceAndShiftsTheOnesBetween() {
+        assertEquals(listOf("p1", "p2", "r1", "b", "c", "a"), drag("a", "c"))
+    }
+
+    @Test
+    fun draggingUpWorksTheSameWay() {
+        assertEquals(listOf("p1", "p2", "r1", "c", "a", "b"), drag("c", "a"))
+    }
+
+    @Test
+    fun movingWithinTheSameBlockIsAllowedAtEitherEnd() {
+        assertEquals(listOf("p2", "p1", "r1", "a", "b", "c"), drag("p1", "p2"))
+        assertEquals(listOf("p1", "p2", "r1", "a", "c", "b"), drag("c", "b"))
+    }
+
+    @Test
+    fun crossingIntoAnotherBlockIsRefused() {
+        assertEquals(ids, drag("a", "p2"))
+        assertEquals(ids, drag("p1", "a"))
+        assertEquals(ids, drag("b", "r1"))
+    }
+
+    @Test
+    fun aNoteOverItselfOrAnUnknownIdChangesNothing() {
+        assertEquals(ids, drag("a", "a"))
+        assertEquals(ids, dragMove(ids, { 2 }, "zz", "a"))
+        assertEquals(ids, dragMove(ids, { 2 }, "a", "zz"))
+    }
+
+    @Test
+    fun aFilteredListIsDraggedAsItIsGiven() {
+        // Only the ids passed are reordered; the screen never offers a drag on a filtered list.
+        assertEquals(listOf("c", "a"), dragMove(listOf("a", "c"), { 2 }, "c", "a"))
+    }
+
+    @Test
+    fun blocksFollowTheWebsOrder() {
+        val base = note("n1")
+        assertEquals(0, orderBlock(base.copy(pinned = true), now, utc))
+        assertEquals(1, orderBlock(base.copy(pinned = false, dueDate = "2026-10-09T09:00:00", archived = false, items = emptyList()), now, utc))
+        assertEquals(2, orderBlock(base.copy(pinned = false, dueDate = null), now, utc))
+    }
+
+    @Test
+    fun onlyTheWholeActiveListCanBeDragged() {
+        val s = NotesState(notes = notes)
+        assertTrue(s.canReorder)
+        assertFalse(s.copy(label = "x").canReorder)
+        assertFalse(s.copy(query = "m").canReorder)
+        assertFalse(s.copy(archivedView = true).canReorder)
+    }
 }
