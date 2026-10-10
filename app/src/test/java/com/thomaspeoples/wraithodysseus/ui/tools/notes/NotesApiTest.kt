@@ -209,4 +209,10 @@ class NotesApiTest {
         server.enqueue(MockResponse().setBody(okio.Buffer().write(ByteArray((DRAWING_MAX_BYTES + 1).toInt()))))
         assertNull(api.drawingBytes("/big.png"))
     }
+
+    @Test
+    fun `drawingBytes fetches another host only over https`() = runBlocking {
+        assertNull(api.drawingBytes("http://other.example/x.png"))
+        assertEquals(0, server.requestCount)
+    }
 }

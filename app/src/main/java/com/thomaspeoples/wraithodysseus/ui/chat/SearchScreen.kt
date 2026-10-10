@@ -40,6 +40,7 @@ import com.thomaspeoples.wraithodysseus.ui.theme.OdyColors
 import java.io.IOException
 import kotlinx.coroutines.delay
 import org.json.JSONException
+import com.thomaspeoples.wraithodysseus.ui.theme.themeBackground
 
 /** Search across every chat's messages. Typing restarts a 300ms wait, so
  * only a pause in typing reaches the server. */
@@ -70,7 +71,7 @@ fun SearchScreen(api: ChatApi, onOpen: (String) -> Unit, onBack: () -> Unit) {
         }
     }
 
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).systemBarsPadding().imePadding()) {
+    Column(Modifier.fillMaxSize().themeBackground(MaterialTheme.colorScheme.background).systemBarsPadding().imePadding()) {
         Row(Modifier.fillMaxWidth().padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
             OutlinedTextField(

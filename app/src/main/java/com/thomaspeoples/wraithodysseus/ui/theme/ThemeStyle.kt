@@ -1,12 +1,11 @@
 package com.thomaspeoples.wraithodysseus.ui.theme
 
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -157,48 +156,49 @@ data class PatternSpec(val pattern: BgPattern, val color: Color, val alpha: Floa
 }
 
 /**
- * The pattern, drawn over the window as a non-interactive layer (a Canvas takes
- * no pointer input). It is a layer above the screens rather than below them
- * because each screen paints its own opaque background; at the web's few
- * percent of opacity it only tints. Draws nothing for the plain background.
- * Anchored to the window, like the web's `background-attachment: fixed`.
+ * A screen's background: [color], then the theme's pattern drawn on it,
+ * behind the content, as the web paints it on the body. Use it wherever a
+ * screen would paint `background(colorScheme.background)`. The style is read
+ * at draw time, so a theme change repaints without recomposing.
  */
-@Composable
-fun ThemeBackground(modifier: Modifier = Modifier) {
-    val spec = PatternSpec.of(AppStyle.current, AppPalette.current.foreground)
+fun Modifier.themeBackground(color: Color): Modifier = drawBehind {
+    drawRect(color)
+    drawThemePattern(PatternSpec.of(AppStyle.current, AppPalette.current.foreground))
+}
+
+/** The pattern itself; nothing for the plain background. Tiles start at the drawing's top-left. */
+private fun DrawScope.drawThemePattern(spec: PatternSpec) {
     if (spec.pattern == BgPattern.NONE || spec.alpha <= 0f) return
     val color = spec.color.copy(alpha = spec.alpha)
-    Canvas(modifier.fillMaxSize()) {
-        val unit = 1.dp.toPx()
-        when (spec.pattern) {
-            BgPattern.DOTS -> {
-                // radial-gradient(c 1px, transparent 1px) in a 20px tile: a disc of radius 1 at the tile centre.
-                val step = 20 * unit
-                var y = step / 2
-                while (y < size.height + unit) {
-                    var x = step / 2
-                    while (x < size.width + unit) {
-                        drawCircle(color, radius = unit, center = Offset(x, y))
-                        x += step
-                    }
-                    y += step
-                }
-            }
-            BgPattern.GRID -> {
-                // Two linear-gradients (c 1px, transparent 1px) in a 24px tile: a line along the tile's top and left edges.
-                val step = 24 * unit
-                var y = 0f
-                while (y < size.height) {
-                    drawRect(color, Offset(0f, y), Size(size.width, unit))
-                    y += step
-                }
-                var x = 0f
-                while (x < size.width) {
-                    drawRect(color, Offset(x, 0f), Size(unit, size.height))
+    val unit = 1.dp.toPx()
+    when (spec.pattern) {
+        BgPattern.DOTS -> {
+            // radial-gradient(c 1px, transparent 1px) in a 20px tile: a disc of radius 1 at the tile centre.
+            val step = 20 * unit
+            var y = step / 2
+            while (y < size.height + unit) {
+                var x = step / 2
+                while (x < size.width + unit) {
+                    drawCircle(color, radius = unit, center = Offset(x, y))
                     x += step
                 }
+                y += step
             }
-            BgPattern.NONE -> Unit
         }
+        BgPattern.GRID -> {
+            // Two linear-gradients (c 1px, transparent 1px) in a 24px tile: a line along the tile's top and left edges.
+            val step = 24 * unit
+            var y = 0f
+            while (y < size.height) {
+                drawRect(color, Offset(0f, y), Size(size.width, unit))
+                y += step
+            }
+            var x = 0f
+            while (x < size.width) {
+                drawRect(color, Offset(x, 0f), Size(unit, size.height))
+                x += step
+            }
+        }
+        BgPattern.NONE -> Unit
     }
 }

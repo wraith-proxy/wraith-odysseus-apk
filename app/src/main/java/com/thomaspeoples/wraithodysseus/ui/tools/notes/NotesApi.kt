@@ -79,6 +79,9 @@ class NotesApi(private val http: Http) {
      */
     suspend fun drawingBytes(url: String): ByteArray? {
         val target = if (url.startsWith("/")) http.url(url) else url.toHttpUrl()
+        // Another host only over https: a cleartext answer could be swapped on the way for
+        // anything at all, and it goes straight to the image decoder.
+        if (!target.isHttps && !http.isOrigin(target)) return null
         val response = http.open(Request.Builder().url(target).get().build(), Http.SEND_TIMEOUT_S)
         return withContext(Dispatchers.IO) {
             response.use { r ->

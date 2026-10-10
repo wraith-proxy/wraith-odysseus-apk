@@ -62,6 +62,7 @@ import com.thomaspeoples.wraithodysseus.ui.theme.Muted
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.thomaspeoples.wraithodysseus.ui.theme.themeBackground
 
 /** The chat/{sid} route, and the app's home: the drawer behind [onMenu]
  * reaches everything else. [canUseBash] is privileges.can_use_bash from
@@ -118,7 +119,7 @@ fun ChatScreen(
     Column(
         Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .themeBackground(MaterialTheme.colorScheme.background)
             .systemBarsPadding()
             .imePadding(),
     ) {

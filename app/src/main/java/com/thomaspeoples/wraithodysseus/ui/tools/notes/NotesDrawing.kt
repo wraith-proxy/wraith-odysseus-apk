@@ -41,8 +41,15 @@ fun drawingSource(imageUrl: String?, maxBytes: Long = DRAWING_MAX_BYTES): Drawin
         }
         return if (bytes.isEmpty() || bytes.size > maxBytes) DrawingSource.Unusable else DrawingSource.Inline(bytes)
     }
+    // The web also takes "./x" and "../x" (notes.js _safeImgSrc), relative to its page at the
+    // server root, where ".." cannot climb higher: both are "/x".
+    var path = v
+    if (path.startsWith("./") || path.startsWith("../")) {
+        while (path.startsWith("./") || path.startsWith("../")) path = path.substringAfter('/')
+        path = "/$path"
+    }
     // "//host" and "/\host" are other hosts to a URL parser, not paths on the server.
-    if (v.startsWith("/")) return if (v.length > 1 && v[1] != '/' && v[1] != '\\') DrawingSource.Remote(v) else DrawingSource.Unusable
+    if (path.startsWith("/")) return if (path.length > 1 && path[1] != '/' && path[1] != '\\') DrawingSource.Remote(path) else DrawingSource.Unusable
     if (WEB_URL.containsMatchIn(v)) return DrawingSource.Remote(v)
     return DrawingSource.Unusable
 }

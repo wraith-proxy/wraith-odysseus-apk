@@ -60,6 +60,7 @@ import com.thomaspeoples.wraithodysseus.ui.theme.Muted
 import com.thomaspeoples.wraithodysseus.ui.tools.ToolEnv
 import java.time.LocalDate
 import java.time.format.TextStyle
+import com.thomaspeoples.wraithodysseus.ui.theme.themeBackground
 
 /** What the editor is open on: [event] null is a new event, [prefill] a quick-add result to adjust. */
 private data class Editing(val event: CalEvent?, val day: LocalDate, val prefill: EventDraft? = null)
@@ -120,7 +121,7 @@ fun CalendarScreen(env: ToolEnv) {
     val shown = remember(state.events, state.hidden) { visibleEvents(state.events, state.hidden) }
     val edit: (CalEvent) -> Unit = { e -> vm.edit(e) { editing = Editing(it, it.start.toLocalDate()) } }
 
-    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    Box(Modifier.fillMaxSize().themeBackground(MaterialTheme.colorScheme.background)) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
             TopLevelBar("Calendar", env.onMenu) {
                 IconButton(onClick = { quickAdd = true }) { Icon(Lucide.Sparkles, "Quick add") }

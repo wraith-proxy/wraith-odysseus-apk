@@ -88,6 +88,8 @@ import com.thomaspeoples.wraithodysseus.ui.theme.OdyColors
 import com.thomaspeoples.wraithodysseus.ui.theme.SendButtonShape
 import java.io.IOException
 import kotlinx.coroutines.launch
+import com.thomaspeoples.wraithodysseus.ui.theme.themeBackground
+import androidx.compose.ui.graphics.Color
 
 /** The message a Forward takes its attachments from. */
 data class ForwardSource(val accountId: String?, val folder: String, val uid: String, val attachments: List<EmailAttachment>)
@@ -394,7 +396,8 @@ fun ComposeScreen(
     }
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+        modifier = Modifier.themeBackground(MaterialTheme.colorScheme.background),
+        containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
                 title = { Text(title ?: if (draft != null) "Reply" else "New message") },

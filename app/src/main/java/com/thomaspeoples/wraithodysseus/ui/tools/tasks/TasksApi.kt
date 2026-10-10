@@ -46,6 +46,8 @@ data class Task(
     /** Present only when listed with include_last_run=true and the task has run. */
     val lastRunStatus: String?,
     val lastRunResult: String?,
+    /** The secret in a webhook task's trigger URL; the server sends it only for webhook tasks. */
+    val webhookToken: String? = null,
 ) {
     /** The web hides "Run now" on a finished one-off. */
     val canRun: Boolean get() = status != "completed"
@@ -108,6 +110,11 @@ data class TaskDraft(
  * because it deletes what it returns and would steal the web tab's reminders.
  */
 class TasksApi(private val http: Http) {
+    /** The URL that triggers a webhook task (tasks.js:1586-1587), or null with no token yet. */
+    fun webhookUrl(task: Task): String? = task.webhookToken?.takeIf { it.isNotEmpty() }?.let { token ->
+        http.url("/api/tasks").newBuilder().addPathSegment(task.id).addPathSegment("webhook").addPathSegment(token).build().toString()
+    }
+
 
     suspend fun list(): List<Task> {
         val body = get("/api/tasks?include_last_run=true")
@@ -210,6 +217,7 @@ class TasksApi(private val http: Http) {
                 isBuiltin = o.optBoolean("is_builtin"),
                 lastRunStatus = o.str("last_run_status"),
                 lastRunResult = o.str("last_run_result"),
+                webhookToken = o.str("webhook_token"),
             )
         }
 

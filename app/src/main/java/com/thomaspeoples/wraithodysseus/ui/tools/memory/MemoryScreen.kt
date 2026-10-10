@@ -54,6 +54,7 @@ import com.thomaspeoples.wraithodysseus.ui.common.TopLevelBar
 import com.thomaspeoples.wraithodysseus.ui.icons.Lucide
 import com.thomaspeoples.wraithodysseus.ui.theme.Muted
 import com.thomaspeoples.wraithodysseus.ui.tools.ToolEnv
+import com.thomaspeoples.wraithodysseus.ui.theme.themeBackground
 
 /** What the editor is open on: [memory] null is a new one. */
 private data class Editing(val memory: Memory?)
@@ -97,7 +98,7 @@ fun MemoryScreen(env: ToolEnv) {
     LaunchedEffect(vm) { vm.messages.collect { snackbar.showSnackbar(it) } }
 
     val visible = state.visible
-    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    Box(Modifier.fillMaxSize().themeBackground(MaterialTheme.colorScheme.background)) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
             TopLevelBar("Memory", env.onMenu) {
                 IconButton(onClick = {

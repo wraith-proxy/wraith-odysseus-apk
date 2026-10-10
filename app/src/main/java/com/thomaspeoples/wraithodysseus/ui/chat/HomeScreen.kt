@@ -30,6 +30,7 @@ import com.thomaspeoples.wraithodysseus.ui.sessions.mostRecent
 import com.thomaspeoples.wraithodysseus.ui.theme.Muted
 import java.io.IOException
 import org.json.JSONException
+import com.thomaspeoples.wraithodysseus.ui.theme.themeBackground
 
 /**
  * Where the app starts after login: straight on into the most recently
@@ -56,7 +57,7 @@ fun HomeScreen(api: ChatApi, onOpenChat: (String) -> Unit, onNewChat: () -> Unit
         }
     }
 
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding()) {
+    Column(Modifier.fillMaxSize().themeBackground(MaterialTheme.colorScheme.background).statusBarsPadding()) {
         TopLevelBar("Odysseus", onMenu = onMenu)
         Column(
             Modifier.fillMaxSize().padding(24.dp),

@@ -55,6 +55,7 @@ import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.toMutableStateList
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -83,6 +84,8 @@ import com.thomaspeoples.wraithodysseus.ui.tools.ToolEnv
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.util.UUID
+import com.thomaspeoples.wraithodysseus.ui.theme.themeBackground
+import androidx.core.content.edit
 
 private const val PREFS = "notes"
 private const val KEY_GRID = "grid"
@@ -160,6 +163,14 @@ fun NotesScreen(env: ToolEnv) {
         } ?: sorted
         val listState = rememberLazyListState()
         val drag = remember { DragState() }
+        // Once a frame while a card is held, not only when the finger moves, so holding it
+        // still at the top or bottom edge keeps the list scrolling.
+        LaunchedEffect(drag.id) {
+            while (drag.id != null) {
+                withFrameNanos { }
+                dragStep(drag, listState, vm)
+            }
+        }
         val tags = remember(state.notes) { allTags(state.notes.filterNot(::isCalendarNote)) }
         val openNote: (Note) -> Unit = { n ->
             if (n.type == "draw") {
@@ -170,7 +181,7 @@ fun NotesScreen(env: ToolEnv) {
             }
         }
 
-        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        Box(Modifier.fillMaxSize().themeBackground(MaterialTheme.colorScheme.background)) {
             Column(Modifier.fillMaxSize().statusBarsPadding()) {
                 TopLevelBar(if (state.archivedView) "Archived notes" else "Notes", env.onMenu) {
                     IconButton(onClick = {
@@ -260,7 +271,6 @@ fun NotesScreen(env: ToolEnv) {
                                                 onDrag = { change, amount ->
                                                     change.consume()
                                                     drag.travel += amount.y
-                                                    dragStep(drag, listState, vm)
                                                 },
                                                 onDragEnd = {
                                                     drag.end()
@@ -323,7 +333,7 @@ private fun readGrid(context: Context): Boolean = try {
 
 private fun saveGrid(context: Context, grid: Boolean) {
     try {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_GRID, grid).apply()
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit { putBoolean(KEY_GRID, grid) }
     } catch (_: RuntimeException) {
         // Only the remembered choice is lost.
     }
@@ -356,7 +366,7 @@ private class DragState {
 private const val EDGE_SCROLL_ZONE = 80
 
 /**
- * After the finger moved: swap with the neighbour the dragged card has passed the middle of
+ * Each frame of a drag: swap with the neighbour the dragged card has passed the middle of
  * (its leading edge past the other's midpoint, so a swap never flips straight back), and scroll
  * when it nears the top or bottom edge.
  */
@@ -377,7 +387,8 @@ private fun dragStep(drag: DragState, listState: LazyListState, vm: NotesViewMod
     }
 }
 
-private const val EDGE_SCROLL_STEP = 24f
+/** Pixels scrolled per frame at the edge. */
+private const val EDGE_SCROLL_STEP = 12f
 
 /** How many checklist rows a card shows before "+N more". */
 private const val CARD_ROWS = 8
@@ -527,7 +538,7 @@ private fun NoteEditor(note: Note?, saving: Boolean, onSave: (NoteDraft) -> Unit
     val leave = { if (dirty) asking = true else onCancel() }
     BackHandler(onBack = leave)
 
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding().navigationBarsPadding()) {
+    Column(Modifier.fillMaxSize().themeBackground(MaterialTheme.colorScheme.background).statusBarsPadding().navigationBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = leave) { Icon(Lucide.ArrowLeft, "Back") }
             Text(if (note == null) "New note" else "Edit note", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))

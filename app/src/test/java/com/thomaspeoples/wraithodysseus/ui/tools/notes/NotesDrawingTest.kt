@@ -54,8 +54,14 @@ class NotesDrawingTest {
     }
 
     @Test
+    fun `relative paths resolve from the server root as the web does`() {
+        assertEquals(DrawingSource.Remote("/x.png"), drawingSource("./x.png"))
+        assertEquals(DrawingSource.Remote("/api/x.png"), drawingSource("../../api/x.png"))
+    }
+
+    @Test
     fun `other hosts disguised as paths and other schemes are refused`() {
-        for (v in listOf("//evil.example/x.png", "/\\evil.example/x.png", "/", "file:///sdcard/x.png", "javascript:alert(1)", "content://x/1", "x.png", "./x.png"))
+        for (v in listOf("//evil.example/x.png", "/\\evil.example/x.png", "/", "file:///sdcard/x.png", "javascript:alert(1)", "content://x/1", "x.png", "./", ".//evil.example/x.png", "../\\evil.example/x.png"))
             assertEquals(v, DrawingSource.Unusable, drawingSource(v))
     }
 

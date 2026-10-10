@@ -53,6 +53,7 @@ import com.thomaspeoples.wraithodysseus.ui.common.TopLevelBar
 import com.thomaspeoples.wraithodysseus.ui.icons.Lucide
 import com.thomaspeoples.wraithodysseus.ui.theme.Muted
 import com.thomaspeoples.wraithodysseus.ui.tools.ToolEnv
+import com.thomaspeoples.wraithodysseus.ui.theme.themeBackground
 
 /**
  * Skills, as the web UI's Skills panel: the user's skills with a text search
@@ -78,7 +79,7 @@ fun SkillsScreen(env: ToolEnv) {
     val doc = state.doc
     if (doc != null) {
         BackHandler(onBack = vm::closeDoc)
-        Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding()) {
+        Column(Modifier.fillMaxSize().themeBackground(MaterialTheme.colorScheme.background).statusBarsPadding()) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = vm::closeDoc) { Icon(Lucide.ArrowLeft, "Back") }
                 Text(doc.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -98,7 +99,7 @@ fun SkillsScreen(env: ToolEnv) {
             vm.setQuery("")
         }
         val visible = state.visible
-        Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding()) {
+        Column(Modifier.fillMaxSize().themeBackground(MaterialTheme.colorScheme.background).statusBarsPadding()) {
             TopLevelBar("Skills", env.onMenu) {
                 IconButton(onClick = {
                     searchOpen = !searchOpen

@@ -10,6 +10,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.mutableIntStateOf
 
 /** The document being edited. [text] and [title] are the edit buffers; [doc] is what the server holds. */
 class Editing(val doc: LibraryDoc, text: String = doc.content, title: String = doc.title) {
@@ -28,7 +29,7 @@ class Editing(val doc: LibraryDoc, text: String = doc.content, title: String = d
  */
 class LibraryViewModel(private val api: LibraryApi) : ViewModel() {
     var items by mutableStateOf<List<LibraryItem>?>(null); private set
-    var total by mutableStateOf(0); private set
+    var total by mutableIntStateOf(0); private set
     var loadError by mutableStateOf<String?>(null); private set
     var refreshing by mutableStateOf(false); private set
     var loadingMore by mutableStateOf(false); private set

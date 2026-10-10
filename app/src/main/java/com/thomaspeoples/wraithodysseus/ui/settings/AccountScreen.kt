@@ -51,6 +51,8 @@ import com.thomaspeoples.wraithodysseus.ui.theme.OdyColors
 import java.io.IOException
 import kotlinx.coroutines.launch
 import org.json.JSONException
+import com.thomaspeoples.wraithodysseus.ui.theme.themeBackground
+import androidx.compose.ui.graphics.Color
 
 /**
  * The web's account panel: who is logged in and their role, the password
@@ -82,7 +84,8 @@ fun AccountScreen(
     }
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+        modifier = Modifier.themeBackground(MaterialTheme.colorScheme.background),
+        containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
                 title = { Text("Account") },

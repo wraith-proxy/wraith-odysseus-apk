@@ -68,6 +68,7 @@ import java.time.format.FormatStyle
 import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import com.thomaspeoples.wraithodysseus.ui.theme.themeBackground
 
 /** How often the unread counts are asked for while the screen is visible. */
 private const val POLL_MS = 60_000L
@@ -139,7 +140,8 @@ fun InboxScreen(api: EmailApi, onOpen: (EmailSummary) -> Unit, onCompose: () -> 
     val sent = isSentFolder(state.folder)
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+        modifier = Modifier.themeBackground(MaterialTheme.colorScheme.background),
+        containerColor = Color.Transparent,
         topBar = {
             if (state.selecting) {
                 TopAppBar(

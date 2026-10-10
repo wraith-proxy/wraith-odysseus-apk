@@ -88,6 +88,8 @@ import java.time.format.FormatStyle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.thomaspeoples.wraithodysseus.ui.theme.themeBackground
+import androidx.compose.ui.graphics.Color
 
 /** The flags the read endpoint does not return, tracked as the user changes them. */
 private data class ReadFlags(val read: Boolean = true, val flagged: Boolean = false, val answered: Boolean = false)
@@ -345,7 +347,8 @@ fun ReadScreen(api: EmailApi, accountId: String?, folder: String, uid: String, o
     val swipePx = with(androidx.compose.ui.platform.LocalDensity.current) { SWIPE_DP.dp.toPx() }
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+        modifier = Modifier.themeBackground(MaterialTheme.colorScheme.background),
+        containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
                 title = { nb?.let { Text("${it.position} of ${it.total}", style = MaterialTheme.typography.labelLarge) } },

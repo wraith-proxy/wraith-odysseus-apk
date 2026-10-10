@@ -63,6 +63,7 @@ import com.thomaspeoples.wraithodysseus.ui.tools.ToolEnv
 import java.time.Instant
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import com.thomaspeoples.wraithodysseus.ui.theme.themeBackground
 
 /**
  * Deep Research, as the web UI's panel: the start form (question, rounds,
@@ -118,7 +119,7 @@ fun ResearchScreen(env: ToolEnv) {
 
 @Composable
 private fun MainPage(env: ToolEnv, vm: ResearchViewModel, state: ResearchState, onReport: (LibraryItem) -> Unit, onChat: (LibraryItem) -> Unit) {
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding()) {
+    Column(Modifier.fillMaxSize().themeBackground(MaterialTheme.colorScheme.background).statusBarsPadding()) {
         TopLevelBar("Deep Research", env.onMenu)
         val closed = state.closed
         when {
@@ -361,7 +362,7 @@ private fun DetailPage(
     val result = detail.result
     val problem = detail.problem
 
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding()) {
+    Column(Modifier.fillMaxSize().themeBackground(MaterialTheme.colorScheme.background).statusBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Lucide.ArrowLeft, "Back") }
             Text(detail.item.query, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
@@ -445,7 +446,7 @@ private fun ReportPage(report: ReportState, onBack: () -> Unit, onLink: (String)
     BackHandler(onBack = onBack)
     val html = report.html
     val problem = report.problem
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding()) {
+    Column(Modifier.fillMaxSize().themeBackground(MaterialTheme.colorScheme.background).statusBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Lucide.ArrowLeft, "Back") }
             Text(report.query, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)

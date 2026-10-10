@@ -32,6 +32,8 @@ import com.thomaspeoples.wraithodysseus.BuildConfig
 import com.thomaspeoples.wraithodysseus.R
 import com.thomaspeoples.wraithodysseus.ui.theme.CodeStyle
 import com.thomaspeoples.wraithodysseus.ui.theme.Muted
+import com.thomaspeoples.wraithodysseus.ui.theme.themeBackground
+import androidx.compose.ui.graphics.Color
 
 private const val REPO_URL = "https://git.thomaspeoples.com/thomaspeoples/wraith-odysseus-apk"
 
@@ -51,7 +53,8 @@ private val libraries = listOf(
 @Composable
 fun AboutScreen(onBack: () -> Unit) {
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+        modifier = Modifier.themeBackground(MaterialTheme.colorScheme.background),
+        containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.menu_about)) },

@@ -47,6 +47,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import kotlinx.coroutines.delay
+import com.thomaspeoples.wraithodysseus.ui.theme.themeBackground
 
 /**
  * Archived chats, as the web's Archive tab: search by name, sort, and per row
@@ -62,7 +63,7 @@ fun ArchivedScreen(ctl: ArchivedController, onOpen: (String) -> Unit, onBack: ()
         ctl.refresh()
     }
 
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).systemBarsPadding()) {
+    Column(Modifier.fillMaxSize().themeBackground(MaterialTheme.colorScheme.background).systemBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
             OutlinedTextField(

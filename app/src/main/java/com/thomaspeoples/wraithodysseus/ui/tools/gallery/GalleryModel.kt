@@ -16,6 +16,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import androidx.compose.runtime.mutableIntStateOf
 
 /** The power of two to pass as BitmapFactory's inSampleSize so the result is still at least [target] px on its longer side. */
 fun sampleSize(width: Int, height: Int, target: Int): Int {
@@ -34,7 +35,7 @@ fun sampleSize(width: Int, height: Int, target: Int): Int {
  */
 class GalleryViewModel(internal val api: GalleryApi) : ViewModel() {
     var items by mutableStateOf<List<GalleryImage>>(emptyList()); private set
-    var total by mutableStateOf(0); private set
+    var total by mutableIntStateOf(0); private set
     var albums by mutableStateOf<List<Album>>(emptyList()); private set
     var loadError by mutableStateOf<String?>(null); private set
     var loading by mutableStateOf(false); private set

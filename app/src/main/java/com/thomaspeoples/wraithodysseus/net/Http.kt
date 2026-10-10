@@ -45,6 +45,11 @@ class Http(private val session: SessionState) {
      * cookie is already cleared by then; the UI only has to go to login. */
     val sessionExpired: SharedFlow<Unit> = expired
 
+    /** Whether [url] is on the stored server's origin (scheme, host and port). */
+    fun isOrigin(url: HttpUrl): Boolean = session.baseUrl.let { o ->
+        o != null && url.scheme == o.scheme && url.host == o.host && url.port == o.port
+    }
+
     /** A path (and optional query) on the stored server. */
     fun url(path: String): HttpUrl =
         checkNotNull(session.baseUrl) { "No server set" }.resolve(path)

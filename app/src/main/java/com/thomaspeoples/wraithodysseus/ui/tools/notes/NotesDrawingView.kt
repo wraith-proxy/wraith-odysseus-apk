@@ -39,6 +39,7 @@ import com.thomaspeoples.wraithodysseus.ui.tools.gallery.sampleSize
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import com.thomaspeoples.wraithodysseus.ui.theme.themeBackground
 
 /** Longer side, in pixels, a drawing is decoded to: more than a phone screen shows. */
 private const val DRAWING_DECODE_PX = 2048
@@ -61,7 +62,7 @@ internal fun DrawingViewer(note: Note, api: NotesApi, onEditInWeb: () -> Unit, o
     val picture by produceState<Picture>(Picture.Loading, note.id, note.imageUrl) {
         value = loadDrawing(note.imageUrl, api)
     }
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding().navigationBarsPadding()) {
+    Column(Modifier.fillMaxSize().themeBackground(MaterialTheme.colorScheme.background).statusBarsPadding().navigationBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Lucide.ArrowLeft, "Back") }
             Text(

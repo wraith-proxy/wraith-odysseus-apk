@@ -48,6 +48,13 @@ import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.os.PersistableBundle
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.runtime.rememberCoroutineScope
+import com.thomaspeoples.wraithodysseus.ui.common.LocalSnackbar
+import kotlinx.coroutines.launch
 
 /**
  * What the editor's boxes hold, all as the text the person sees so that a
@@ -118,7 +125,7 @@ private val SCHEDULE_LABELS = mapOf("daily" to "Daily", "weekly" to "Weekly", "m
  * and are left as they are.
  */
 @Composable
-fun TaskEditor(task: Task, saving: Boolean, onSave: (TaskForm) -> Unit, onCancel: () -> Unit) {
+fun TaskEditor(task: Task, saving: Boolean, onSave: (TaskForm) -> Unit, onCancel: () -> Unit, webhookUrl: String? = null) {
     val zone = remember { ZoneId.systemDefault() }
     var form by rememberSaveable(task.id, stateSaver = TaskForm.Saver) { mutableStateOf(TaskForm.of(task, zone, Instant.now())) }
     var problem by rememberSaveable { mutableStateOf<String?>(null) }
@@ -180,7 +187,7 @@ fun TaskEditor(task: Task, saving: Boolean, onSave: (TaskForm) -> Unit, onCancel
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
-                "webhook" -> Text("Runs when its webhook URL is called. The URL is shown in the web UI.", color = Muted, style = MaterialTheme.typography.bodySmall)
+                "webhook" -> WebhookUrl(webhookUrl)
             }
             problem?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
         }
@@ -263,3 +270,35 @@ private fun pickDate(context: Context, current: LocalDate, onPicked: (LocalDate)
 private fun pickTime(context: Context, current: LocalTime, onPicked: (LocalTime) -> Unit) {
     TimePickerDialog(context, { _, h, m -> onPicked(LocalTime.of(h, m)) }, current.hour, current.minute, DateFormat.is24HourFormat(context)).show()
 }
+
+/**
+ * A webhook task's trigger URL, read-only with Copy, as the web's form shows
+ * it (tasks.js:1586-1598). Anyone with the URL can run the task, so the copy
+ * is marked sensitive and kept out of the clipboard preview.
+ */
+@Composable
+private fun WebhookUrl(url: String?) {
+    if (url == null) {
+        Text("Webhook URL will be generated when the task is saved.", color = Muted, style = MaterialTheme.typography.bodySmall)
+        return
+    }
+    val context = LocalContext.current
+    val snackbar = LocalSnackbar.current
+    val scope = rememberCoroutineScope()
+    Text("Webhook URL", style = MaterialTheme.typography.labelMedium)
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        SelectionContainer(Modifier.weight(1f)) { Text(url, style = MaterialTheme.typography.bodySmall) }
+        TextButton(onClick = {
+            val clip = ClipData.newPlainText("Webhook URL", url).apply {
+                description.extras = PersistableBundle().apply { putBoolean(EXTRA_IS_SENSITIVE, true) }
+            }
+            context.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(clip)
+            scope.launch { snackbar.showSnackbar("Copied") }
+        }) { Text("Copy") }
+    }
+    Text("POST this URL from any external service to trigger the task. No auth needed.", color = Muted, style = MaterialTheme.typography.bodySmall)
+}
+
+/** ClipDescription.EXTRA_IS_SENSITIVE (API 33), by value so older phones just ignore it. */
+private const val EXTRA_IS_SENSITIVE = "android.content.extra.IS_SENSITIVE"
+

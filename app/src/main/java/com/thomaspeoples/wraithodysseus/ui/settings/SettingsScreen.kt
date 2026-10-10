@@ -34,6 +34,7 @@ import com.thomaspeoples.wraithodysseus.ui.icons.Lucide
 import com.thomaspeoples.wraithodysseus.ui.theme.Muted
 import com.thomaspeoples.wraithodysseus.ui.theme.OdyColors
 import com.thomaspeoples.wraithodysseus.ui.theme.Raised
+import com.thomaspeoples.wraithodysseus.ui.theme.themeBackground
 
 /** Where the drawer's account row and gear lead: who is logged in, and the
  * app's own pages. Server settings stay in the web UI for now. */
@@ -47,7 +48,7 @@ fun SettingsScreen(
     onFaq: () -> Unit,
     onLogout: () -> Unit,
 ) {
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding()) {
+    Column(Modifier.fillMaxSize().themeBackground(MaterialTheme.colorScheme.background).statusBarsPadding()) {
         TopLevelBar("Settings", onMenu = onMenu)
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
             Row(

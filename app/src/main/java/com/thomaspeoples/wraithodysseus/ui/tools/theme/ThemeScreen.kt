@@ -50,6 +50,7 @@ import com.thomaspeoples.wraithodysseus.ui.tools.ToolEnv
 import java.io.IOException
 import kotlinx.coroutines.launch
 import org.json.JSONException
+import com.thomaspeoples.wraithodysseus.ui.theme.themeBackground
 
 /**
  * The web's theme picker: the presets, and the custom themes saved on the
@@ -99,7 +100,7 @@ fun ThemeScreen(env: ToolEnv) {
         }
     }
 
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding()) {
+    Column(Modifier.fillMaxSize().themeBackground(MaterialTheme.colorScheme.background).statusBarsPadding()) {
         TopLevelBar("Theme", onMenu = env.onMenu)
         LazyVerticalGrid(
             columns = GridCells.Adaptive(150.dp),

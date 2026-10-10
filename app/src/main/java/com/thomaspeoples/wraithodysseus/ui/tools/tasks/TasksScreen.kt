@@ -51,6 +51,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
+import com.thomaspeoples.wraithodysseus.ui.theme.themeBackground
 
 /**
  * The web UI's Tasks panel: the list with pause, resume, run now, run
@@ -62,6 +63,7 @@ import java.time.format.FormatStyle
 @Composable
 fun TasksScreen(env: ToolEnv) {
     val vm = viewModel { TasksViewModel(TasksApi(env.http)) }
+    val api = remember(env.http) { TasksApi(env.http) }
     val snackbar = LocalSnackbar.current
     var sheet by remember { mutableStateOf<Task?>(null) }
     var deleting by remember { mutableStateOf<Task?>(null) }
@@ -73,10 +75,10 @@ fun TasksScreen(env: ToolEnv) {
     // auth switched off everyone is admin (task_action_policy.py owner_has_admin_task_privileges).
     val isAdmin = env.status?.let { it.isAdmin || !it.configured } == true
 
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding()) {
+    Column(Modifier.fillMaxSize().themeBackground(MaterialTheme.colorScheme.background).statusBarsPadding()) {
         val editing = vm.editing
         if (editing != null) {
-            TaskEditor(editing, saving = vm.saving, onSave = vm::saveEdit, onCancel = vm::closeEdit)
+            TaskEditor(editing, saving = vm.saving, onSave = vm::saveEdit, onCancel = vm::closeEdit, webhookUrl = api.webhookUrl(editing))
             return@Column
         }
         val history = vm.history

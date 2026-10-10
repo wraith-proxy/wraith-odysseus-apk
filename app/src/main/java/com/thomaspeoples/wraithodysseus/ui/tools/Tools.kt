@@ -37,6 +37,7 @@ import com.thomaspeoples.wraithodysseus.ui.tools.skills.SkillsScreen
 import com.thomaspeoples.wraithodysseus.ui.tools.tasks.TasksScreen
 import com.thomaspeoples.wraithodysseus.ui.tools.theme.ThemeScreen
 import kotlinx.coroutines.launch
+import com.thomaspeoples.wraithodysseus.ui.theme.themeBackground
 
 /**
  * The web UI's Tools section, in its order. A [webOnly] tool opens the web
@@ -106,7 +107,7 @@ fun WebOnlyScreen(tool: Tool, env: ToolEnv) {
     val context = LocalContext.current
     val snackbar = LocalSnackbar.current
     val scope = rememberCoroutineScope()
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding()) {
+    Column(Modifier.fillMaxSize().themeBackground(MaterialTheme.colorScheme.background).statusBarsPadding()) {
         TopLevelBar(tool.label, onMenu = env.onMenu)
         Column(
             Modifier.fillMaxSize().padding(24.dp),

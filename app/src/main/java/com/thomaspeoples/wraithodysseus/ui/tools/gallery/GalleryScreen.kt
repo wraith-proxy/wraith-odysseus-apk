@@ -68,6 +68,7 @@ import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import com.thomaspeoples.wraithodysseus.ui.theme.themeBackground
 
 /**
  * The web UI's Gallery: a paged grid of the library (newest first) with an
@@ -101,7 +102,7 @@ fun GalleryScreen(env: ToolEnv) {
     if (open != null && vm.items.isNotEmpty()) {
         Viewer(vm, open.coerceIn(0, vm.items.lastIndex), onClose = { viewing = null }, onDelete = { deleting = it })
     } else {
-        Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding()) {
+        Column(Modifier.fillMaxSize().themeBackground(MaterialTheme.colorScheme.background).statusBarsPadding()) {
             TopLevelBar("Gallery", onMenu = env.onMenu, actions = {
                 IconButton(
                     onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
@@ -203,7 +204,7 @@ private fun Viewer(vm: GalleryViewModel, start: Int, onClose: () -> Unit, onDele
         snapshotFlow { pager.currentPage }.collect { if (it >= vm.items.size - PREFETCH) vm.loadMore() }
     }
     val img = vm.items.getOrNull(pager.currentPage)
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding()) {
+    Column(Modifier.fillMaxSize().themeBackground(MaterialTheme.colorScheme.background).statusBarsPadding()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onClose) { Icon(Lucide.ArrowLeft, "Back") }
             Text(

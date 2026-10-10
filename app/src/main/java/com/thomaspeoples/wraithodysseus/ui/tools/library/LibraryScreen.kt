@@ -59,6 +59,7 @@ import com.thomaspeoples.wraithodysseus.ui.icons.Lucide
 import com.thomaspeoples.wraithodysseus.ui.theme.Muted
 import com.thomaspeoples.wraithodysseus.ui.tools.ToolEnv
 import java.time.Instant
+import com.thomaspeoples.wraithodysseus.ui.theme.themeBackground
 
 /**
  * The web UI's document library: search, open a document and edit it as text
@@ -82,7 +83,7 @@ fun LibraryScreen(env: ToolEnv) {
     val editing = vm.editing
     BackHandler(enabled = editing != null) { if (editing?.dirty == true) discarding = true else vm.close() }
 
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding()) {
+    Column(Modifier.fillMaxSize().themeBackground(MaterialTheme.colorScheme.background).statusBarsPadding()) {
         if (editing != null) {
             Editor(editing, saving = vm.saving, onBack = { if (editing.dirty) discarding = true else vm.close() }, onSave = vm::save)
             return@Column

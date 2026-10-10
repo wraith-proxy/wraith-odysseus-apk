@@ -13,6 +13,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import org.json.JSONException
+import androidx.compose.runtime.mutableIntStateOf
 
 /**
  * The archived-chats view (the web's Archive tab): a searchable, sortable
@@ -28,7 +29,7 @@ class ArchivedController(
 ) {
     var rows by mutableStateOf<List<ArchivedSession>>(emptyList())
         private set
-    var total by mutableStateOf(0)
+    var total by mutableIntStateOf(0)
         private set
     /** True until the first page (or the first page of a new search) arrives. */
     var loading by mutableStateOf(true)

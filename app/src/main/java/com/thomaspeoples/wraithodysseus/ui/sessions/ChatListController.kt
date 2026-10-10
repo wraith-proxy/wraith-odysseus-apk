@@ -12,6 +12,7 @@ import java.io.IOException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import org.json.JSONException
+import androidx.core.content.edit
 
 /**
  * The drawer's chat list: what is open (menus, dialogs, select mode), the
@@ -74,12 +75,12 @@ class ChatListController(
 
     fun sortBy(mode: SortMode) {
         sort = mode
-        prefs.edit().putString(SORT, mode.key).apply()
+        prefs.edit { putString(SORT, mode.key) }
     }
 
     fun toggleGroup(key: String) {
         collapsed = if (key in collapsed) collapsed - key else collapsed + key
-        prefs.edit().putStringSet(COLLAPSED, collapsed).apply()
+        prefs.edit { putStringSet(COLLAPSED, collapsed) }
     }
 
     fun showAll(group: String) {

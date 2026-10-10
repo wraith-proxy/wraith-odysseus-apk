@@ -255,6 +255,14 @@ class TasksApiTest {
 
     // -- schedule text ----------------------------------------------------
 
+    @Test
+    fun aWebhookTaskGetsItsTriggerUrlAndOthersNone() {
+        val hook = task("""{"id":"t 1","trigger_type":"webhook","webhook_token":"tok_A-9"}""")
+        assertEquals(server.url("/api/tasks/t%201/webhook/tok_A-9").toString(), api.webhookUrl(hook))
+        assertNull(api.webhookUrl(task("""{"id":"t2","trigger_type":"webhook","webhook_token":null}""")))
+        assertNull(api.webhookUrl(task("""{"id":"t3"}""")))
+    }
+
     private fun task(json: String) = TasksApi.parseTask(JSONObject(json))!!
 
     private fun text(t: Task) = TasksApi.scheduleText(t, paris, now, Locale.US)
