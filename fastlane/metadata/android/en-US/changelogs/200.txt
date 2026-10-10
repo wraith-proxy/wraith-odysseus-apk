@@ -1,0 +1,22 @@
+Features:
+- theme fonts and background patterns
+- play gallery videos
+- edit scheduled tasks
+- view drawing notes
+- drag to reorder notes
+- theme and settings
+- document library
+- gallery
+- scheduled tasks
+- deep research
+- memory and skills
+- calendar
+- notes
+- the web email composer
+- the web email reader
+- the web email list
+- archived chats, lazy new chat and account
+- the web sidebar chat list
+- the web composer and chat header
+- reply variants, continue, read aloud and background replies
+…

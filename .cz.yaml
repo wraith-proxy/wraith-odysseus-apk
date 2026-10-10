@@ -13,10 +13,13 @@ commitizen:
   tag_format: android-$version
   bump_message: ":ghost: chore: release android-$current_version -> android-$new_version [skip ci]"
 
-  # versionName is the only version string in the tree; versionCode is
-  # derived from it at build time, so there is exactly one line to rewrite.
+  # versionName is the only version string in the tree. versionCode is not a
+  # version string, so cz cannot rewrite it; the hook does, along with the
+  # F-Droid changelog for the new versionCode.
   version_files:
-    - app/build.gradle.kts:appVersionName
+    - app/build.gradle.kts:versionName
+  pre_bump_hooks:
+    - python3 bin/fdroid-bump.py
 
   customize:
     bump_map:

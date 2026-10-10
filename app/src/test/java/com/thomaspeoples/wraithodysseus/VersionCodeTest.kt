@@ -4,10 +4,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 /**
- * versionCode is derived in app/build.gradle.kts, where no unit test can
- * reach the formula. This pins the built result to the documented scheme
- * (major*10000 + minor*100 + patch, at least 1), so an edit to the build
- * script that breaks monotonic codes fails here instead of on F-Droid.
+ * versionCode is a literal in app/build.gradle.kts that bin/fdroid-bump.py
+ * rewrites on each bump. This pins the built value to the documented scheme
+ * (major*10000 + minor*100 + patch, at least 1), so a bump that skipped the
+ * hook, or a hand edit, fails here instead of on F-Droid.
  */
 class VersionCodeTest {
 

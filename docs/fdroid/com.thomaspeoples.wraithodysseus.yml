@@ -1,16 +1,19 @@
-# DRAFT fdroiddata recipe, not yet submitted and not yet run through
-# `fdroid lint` / `fdroid build`. Copy to fdroiddata as
-# metadata/com.thomaspeoples.wraithodysseus.yml when the MR is opened.
+# fdroiddata recipe. Copy to fdroiddata as
+# metadata/com.thomaspeoples.wraithodysseus.yml for the one merge request;
+# CI runs `fdroid lint` on this file (bin/fdroid-lint.sh).
 #
-# Deliberately left out until then (see docs/ROADMAP.md):
-# - AllowedAPKSigningKeys / Binaries: need a reproducible build first.
-# - Automatic updates: versionCode is derived from appVersionName at build
-#   time, so checkupdates has no literal versionCode to read. Each release is
-#   added by hand, with versionCode = major*10000 + minor*100 + patch.
-# - Per-versionCode changelogs (fastlane/.../changelogs/<versionCode>.txt).
+# After that MR, releases need nothing by hand: F-Droid's checkupdates finds
+# each new android-* tag, reads the literal versionCode/versionName in
+# app/build.gradle.kts at that tag, and appends a build. Listing text,
+# screenshots and per-versionCode changelogs come from fastlane/, which
+# bin/fdroid-bump.py keeps in step on every commitizen bump.
+#
+# Left out until builds are reproducible (see docs/ROADMAP.md):
+# AllowedAPKSigningKeys / Binaries. Until then F-Droid signs with its key.
 
 Categories:
-  - Internet
+  - AI Chat
+  - Email
 License: MIT
 AuthorName: Thomas Peoples
 WebSite: https://git.thomaspeoples.com/thomaspeoples/wraith-odysseus-apk
@@ -24,9 +27,9 @@ RepoType: git
 Repo: https://git.thomaspeoples.com/thomaspeoples/wraith-odysseus-apk.git
 
 Builds:
-  - versionName: 0.1.0
-    versionCode: 100
-    commit: android-0.1.0
+  - versionName: 0.2.0
+    versionCode: 200
+    commit: android-0.2.0
     subdir: app
     gradle:
       - yes
@@ -35,7 +38,7 @@ Builds:
     gradleprops:
       - updateCheck=false
 
-AutoUpdateMode: None
-UpdateCheckMode: None
-CurrentVersion: 0.1.0
-CurrentVersionCode: 100
+AutoUpdateMode: Version
+UpdateCheckMode: Tags ^android-[0-9.]+$
+CurrentVersion: 0.2.0
+CurrentVersionCode: 200

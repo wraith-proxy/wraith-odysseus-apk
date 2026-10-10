@@ -25,6 +25,9 @@ jobs:
       - name: Android Lint
         run: ./gradlew lintDebug
 
+      - name: F-Droid recipe and changelog
+        run: bin/fdroid-lint.sh
+
       - name: Build debug APK
         run: ./gradlew assembleDebug
 
