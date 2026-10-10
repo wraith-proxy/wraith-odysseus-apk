@@ -30,13 +30,18 @@ class ApiException(val status: Int, override val message: String) : Exception(me
  * Authorization header: the server rejects any Bearer token that is not one
  * of its own ody_ API tokens, and this app authenticates by cookie only.
  */
-class Http(private val session: SessionState) {
+class Http(
+    private val session: SessionState,
+    // Tests only: trusts a MockWebServer's self-signed certificate.
+    tls: (OkHttpClient.Builder) -> Unit = {},
+) {
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(JSON_TIMEOUT_S, TimeUnit.SECONDS)
         .followRedirects(false)
         .followSslRedirects(false)
+        .apply(tls)
         .build()
 
     private val expired = MutableSharedFlow<Unit>(extraBufferCapacity = 1)

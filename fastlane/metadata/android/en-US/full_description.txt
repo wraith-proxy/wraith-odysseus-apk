@@ -24,10 +24,9 @@ You log in with your Odysseus username, password and 2FA code, just as in the
 web UI. Only the resulting session cookie is stored, encrypted with a key that
 never leaves the device. Your password is never stored.
 
-Cleartext traffic: plain http is allowed only for private network addresses
-(a home LAN or a Tailscale 100.x address), and refused for any public host or
-hostname, so your session never crosses the internet unencrypted. A server
-that requires https always gets https.
+https only: plain http is refused, so your session is never sent
+unencrypted. On a tailnet, Tailscale's https certificates for *.ts.net names
+work as is.
 
 Update check: builds downloaded from this project's releases check its Gitea
 releases page once per launch and offer a link when a newer version exists.

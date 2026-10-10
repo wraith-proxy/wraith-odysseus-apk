@@ -36,7 +36,9 @@ class SessionStore(context: Context) : SessionState {
     private val conn = context.getSharedPreferences("conn", Context.MODE_PRIVATE)
 
     override var baseUrl: HttpUrl?
-        get() = conn.getString(KEY_BASE_URL, null)?.toHttpUrlOrNull()
+        // An http origin saved before the app went https-only reads as none,
+        // so that install lands on login instead of failing every request.
+        get() = conn.getString(KEY_BASE_URL, null)?.toHttpUrlOrNull()?.takeIf { it.isHttps }
         set(value) = conn.edit { putString(KEY_BASE_URL, value?.toString()) }
 
     var username: String?

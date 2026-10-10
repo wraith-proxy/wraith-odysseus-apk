@@ -69,10 +69,9 @@ username, password and TOTP flow as the web UI. The resulting cookie is
 encrypted with a Keystore key that cannot leave the device. The password is
 never written anywhere.
 
-**Plain http only for private IP addresses.** Cleartext is allowed so a LAN or
-Tailscale `100.x` address works, but the app refuses http for any public host
-or any hostname when the address is entered. The cookie is also never sent over
-http if the server marked it Secure, and redirects are never followed.
+**https only.** The manifest allows no cleartext, and the app refuses an http
+address when it is entered. On a tailnet, use the server's `*.ts.net` https
+address (Tailscale's HTTPS certificates). Redirects are never followed.
 
 **`versionCode` follows `versionName`.** `major * 10000 + minor * 100 +
 patch`, rewritten on every bump by a commitizen hook (`bin/fdroid-bump.py`),

@@ -1,9 +1,11 @@
 package com.thomaspeoples.wraithodysseus.ui.login
 
 import com.thomaspeoples.wraithodysseus.auth.AuthRepo
+import com.thomaspeoples.wraithodysseus.net.HostPolicy
 import com.thomaspeoples.wraithodysseus.net.Http
 import com.thomaspeoples.wraithodysseus.net.SessionCookie
 import com.thomaspeoples.wraithodysseus.net.SessionState
+import java.net.InetAddress
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -11,9 +13,10 @@ import kotlinx.coroutines.job
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl
-import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
+import okhttp3.tls.HandshakeCertificates
+import okhttp3.tls.HeldCertificate
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -34,12 +37,19 @@ class LoginViewModelTest {
     private val session = FakeSession(null, null)
     private var saved: Pair<HttpUrl, String>? = null
 
-    // A literal IP, not server.url(): MockWebServer names itself "localhost",
-    // and HostPolicy rightly refuses plain http to any hostname.
-    private val origin get() = "http://127.0.0.1:${server.port}/".toHttpUrl()
+    // HostPolicy accepts https only, so the server speaks TLS with a
+    // throwaway certificate that only this test's Http trusts.
+    private val cert = HeldCertificate.Builder()
+        .addSubjectAlternativeName(InetAddress.getByName("localhost").canonicalHostName)
+        .build()
+    private val trust = HandshakeCertificates.Builder().addTrustedCertificate(cert.certificate).build()
+    private val origin get() = server.url("/")
 
     @Before
-    fun setUp() = server.start()
+    fun setUp() {
+        server.useHttps(HandshakeCertificates.Builder().heldCertificate(cert).build().sslSocketFactory(), false)
+        server.start()
+    }
 
     @After
     fun tearDown() = server.shutdown()
@@ -47,7 +57,7 @@ class LoginViewModelTest {
     /** The VM's coroutines run as children of the test's own runBlocking, so
      * [settle] can wait for them without a main looper. */
     private fun CoroutineScope.vm() = LoginViewModel(
-        repo = AuthRepo(Http(session), session),
+        repo = AuthRepo(Http(session) { it.sslSocketFactory(trust.sslSocketFactory(), trust.trustManager) }, session),
         initialUrl = "",
         initialUsername = "",
         saveConnection = { origin, username -> saved = origin to username },
@@ -106,7 +116,7 @@ class LoginViewModelTest {
         vm.submit()
         vm.checkServer()
         settle()
-        assertTrue(vm.state.value.serverError!!.startsWith("Plain http"))
+        assertEquals(HostPolicy.NEEDS_HTTPS, vm.state.value.serverError)
         assertEquals(0, server.requestCount)
     }
 
@@ -134,7 +144,7 @@ class LoginViewModelTest {
         vm.checkServer()
         // Off this thread, so the check gets to send its request meanwhile.
         withContext(Dispatchers.IO) { server.takeRequest() }
-        vm.onServerUrl("http://127.0.0.1:1/")
+        vm.onServerUrl("https://127.0.0.1:1/")
         settle()
         // Neither the old server's version nor the cancellation as an error.
         assertNull(vm.state.value.serverVersion)
