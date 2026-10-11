@@ -22,13 +22,17 @@ on merge to `main`. The APK is `wraith-odysseus.apk` on the
 [Releases](https://git.thomaspeoples.com/thomaspeoples/wraith-odysseus-apk/releases)
 page, tagged `android-X.Y.Z`.
 
+<a href="https://f-droid.org/packages/com.thomaspeoples.wraithodysseus"><img src="https://f-droid.org/badge/get-it-on.png" alt="Get it on F-Droid" height="80"></a>
+
 - **Obtainium:** point it at this repo's URL and tell it the host is Gitea, or
   open the one-tap preset link in
   [docs/android-distribution.md](docs/android-distribution.md#one-tap-obtainium-preset)
   on the phone. It tracks releases automatically.
 - **Direct sideload:** download the APK from Releases and open it. The app also
   checks for a newer release itself on launch.
-- **F-Droid:** not yet submitted. The recipe is in
+- **F-Droid:** submitted in
+  [fdroiddata!51956](https://gitlab.com/fdroid/fdroiddata/-/merge_requests/51956);
+  the badge above works once it is merged and published. The recipe is in
   [docs/fdroid/](docs/fdroid/com.thomaspeoples.wraithodysseus.yml) and CI
   lints it; see
   [docs/android-distribution.md](docs/android-distribution.md#f-droid).

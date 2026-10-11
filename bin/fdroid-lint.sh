@@ -1,18 +1,13 @@
 #!/usr/bin/env bash
 # F-Droid checks. test.yml runs this; locally, run it inside the runner image
-# (docs/ci.md). fdroidserver is pip-installed at a pinned version until it is
-# baked into the image (docs/ROADMAP.md).
+# (docs/ci.md). fdroidserver is baked into the image at a pinned version
+# (ci-images/Dockerfile.android).
 set -euo pipefail
 
-FDROIDSERVER=2.4.5
 APPID=com.thomaspeoples.wraithodysseus
 
 tools=$(mktemp -d)
 trap 'rm -rf -- "${tools:?}"' EXIT
-
-# No venv: the image lacks python3-venv.
-pip3 install -q --disable-pip-version-check --target "$tools/py" "fdroidserver==$FDROIDSERVER"
-export PYTHONPATH="$tools/py" PATH="$tools/py/bin:$PATH"
 
 echo "== fdroid lint: the recipe, as fdroiddata would see it"
 # Categories are validated against fdroiddata's live list, which changes;

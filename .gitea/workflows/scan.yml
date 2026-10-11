@@ -1,0 +1,21 @@
+name: Weekly security scan
+
+# New CVEs land without a push, so the same scan test.yml runs on every
+# branch also runs weekly against main. Trivy is the part that changes week
+# to week; gitleaks and semgrep are cheap to keep alongside it.
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+jobs:
+  security-scan:
+    runs-on: ghost-runner-android
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # gitleaks reads every commit
+
+      - name: Secrets, code patterns and dependency CVEs
+        run: bin/security-scan.sh

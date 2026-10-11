@@ -16,36 +16,36 @@ need to happen in.
 - [x] Email: unread across every account, read, mark unread, send, reply.
 - [x] About, FAQ, update dialog, fastlane text, F-Droid recipe draft,
       Obtainium preset link.
-- [ ] Fastlane screenshots (`images/phoneScreenshots/1-4.png`), taken on the
+- [x] Fastlane screenshots (`images/phoneScreenshots/1-7.png`), taken on the
       device with a throwaway account and fake mail.
-- [ ] Owner steps: repo public, keystore minted, secrets set.
+- [x] Owner steps: repo public, keystore minted, secrets set.
 - [ ] Device checklist on a real phone, then 1.0.0.
 
-## 0.2.0 to 0.6.0: the web UI, on the phone
+## 0.2.0: the web UI, on the phone
 
-One release at a time, each tried on a phone before it ships. Everything
-uses the server's existing API; nothing here needs a server change.
+Planned as five releases, shipped together as 0.2.0. Everything uses the
+server's existing API; nothing here needs a server change.
 
-- [ ] 0.2.0: the web UI's sidebar as a drawer from the right, in place of the
+- [x] The web UI's sidebar as a drawer from the right, in place of the
       tabs; hold a message for its actions (copy, edit, resend, regenerate,
       fork, rewrite, delete); AI reply in email; the ghost-sail icon.
-- [ ] 0.3.0: chats as rich as the web: sources, tool cards, timings, the
+- [x] Chats as rich as the web: sources, tool cards, timings, the
       context ring, reply variants, tables, the full composer and header.
-- [ ] 0.4.0: the chat list: hold a chat to rename, favourite, copy, move to a
+- [x] The chat list: hold a chat to rename, favourite, copy, move to a
       folder, archive or delete; folders, date groups, select, archived chats.
-- [ ] 0.5.0: email as the web has it: accounts, folders, filters, search,
+- [x] Email as the web has it: accounts, folders, filters, search,
       HTML with images on request, attachments, reply all, forward, translate,
       schedule send.
-- [ ] 0.6.0: the tools: notes, calendar, memory and skills, deep research,
+- [x] The tools: notes, calendar, memory and skills, deep research,
       tasks, gallery, library, theme.
 
 Compare and Cookbook stay in the web UI; their drawer rows open it.
 
 ## CI
 
-- [ ] Bake gitleaks, semgrep and Trivy into the `ghost-runner-android` image,
+- [x] Bake gitleaks, semgrep and Trivy into the `ghost-runner-android` image,
       then drop the pinned downloads from `bin/security-scan.sh`.
-- [ ] A weekly scheduled Trivy run, since new CVEs land without a push.
+- [x] A weekly scheduled Trivy run, since new CVEs land without a push.
 
 ## F-Droid
 
@@ -56,10 +56,18 @@ by the bump hook, and fastlane screenshots.
 
 - [x] The one fdroiddata merge request:
   [fdroiddata!51956](https://gitlab.com/fdroid/fdroiddata/-/merge_requests/51956).
-- [ ] Bake fdroidserver into the runner image, like the scan tools.
+- [x] Bake fdroidserver into the runner image, like the scan tools.
+
+Next release, from the fdroiddata review:
+
+- [ ] Add Aurora Droid (`com.aurora.adroid`) and the Privileged Extension
+      (`org.fdroid.fdroid.privileged`) to `FDROID_INSTALLERS`, so those
+      installs skip the update check too.
+- [ ] Demo mode: try the app with no server, on canned chats, mail and
+      tools, so testers can check it without an Odysseus install.
 
 - [x] Reproducible builds: F-Droid's build image reproduces the CI APK, so
   the recipe ships this project's signature (`Binaries:`,
   `AllowedAPKSigningKeys`).
-- [ ] A CI job that runs F-Droid's build image against each release, so a
+- [x] A CI job that runs F-Droid's build image against each release, so a
   release that stops reproducing is caught here, not by F-Droid.
