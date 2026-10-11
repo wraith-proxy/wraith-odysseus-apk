@@ -8,8 +8,11 @@ on:
 jobs:
   # Bumping is pure git + commitizen and needs no Android SDK, so it runs on
   # the existing Python image, which already has cz baked in.
+  # [no release] lets a chore branch (CI or docs only) merge without a bump.
+  # It cannot be [skip ci]: that would also skip the branch's own test.yml,
+  # and with it the auto-merge.
   bump:
-    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    if: "!contains(github.event.head_commit.message, '[skip ci]') && !contains(github.event.head_commit.message, '[no release]')"
     runs-on: ghost-runner
     steps:
       - name: Check out code
@@ -26,6 +29,8 @@ jobs:
   release-apk:
     needs: bump
     runs-on: ghost-runner-android
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
     steps:
       # ref: main, NOT the triggering SHA. actions/checkout defaults to the
       # commit the run started at, which is the commit BEFORE bump pushed --
@@ -169,3 +174,24 @@ jobs:
             -F "attachment=@$APK" > /dev/null
 
           echo "Released $TAG"
+
+  # F-Droid ships a release only if its own build matches the APK just
+  # published (Binaries: in the recipe). This is that check, in F-Droid's
+  # image, so a release that stops reproducing goes red here before
+  # F-Droid's checkupdates picks it up. It cannot gate the release: the
+  # comparison needs the published APK.
+  fdroid-repro:
+    needs: release-apk
+    runs-on: ubuntu-latest
+    container:
+      image: registry.gitlab.com/fdroid/fdroidserver:buildserver-trixie
+    steps:
+      # No actions/checkout: it is a JS action and this image has no node.
+      - name: Reproduce the release with F-Droid's build
+        env:
+          TAG: ${{ needs.release-apk.outputs.tag }}
+        run: |
+          set -e
+          git clone -q "https://git.thomaspeoples.com/$GITHUB_REPOSITORY.git" src
+          cd src
+          bin/fdroid-repro.sh "$TAG"

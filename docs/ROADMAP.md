@@ -43,9 +43,9 @@ Compare and Cookbook stay in the web UI; their drawer rows open it.
 
 ## CI
 
-- [ ] Bake gitleaks, semgrep and Trivy into the `ghost-runner-android` image,
+- [x] Bake gitleaks, semgrep and Trivy into the `ghost-runner-android` image,
       then drop the pinned downloads from `bin/security-scan.sh`.
-- [ ] A weekly scheduled Trivy run, since new CVEs land without a push.
+- [x] A weekly scheduled Trivy run, since new CVEs land without a push.
 
 ## F-Droid
 
@@ -56,7 +56,7 @@ by the bump hook, and fastlane screenshots.
 
 - [x] The one fdroiddata merge request:
   [fdroiddata!51956](https://gitlab.com/fdroid/fdroiddata/-/merge_requests/51956).
-- [ ] Bake fdroidserver into the runner image, like the scan tools.
+- [x] Bake fdroidserver into the runner image, like the scan tools.
 
 Next release, from the fdroiddata review:
 
@@ -69,5 +69,5 @@ Next release, from the fdroiddata review:
 - [x] Reproducible builds: F-Droid's build image reproduces the CI APK, so
   the recipe ships this project's signature (`Binaries:`,
   `AllowedAPKSigningKeys`).
-- [ ] A CI job that runs F-Droid's build image against each release, so a
+- [x] A CI job that runs F-Droid's build image against each release, so a
   release that stops reproducing is caught here, not by F-Droid.
