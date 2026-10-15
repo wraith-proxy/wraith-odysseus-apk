@@ -43,8 +43,8 @@ android {
         // major*10000 + minor*100 + patch (1.0.3 -> 10003), refusing
         // minor or patch >= 100 so codes stay monotonic. VersionCodeTest
         // fails the build if the two ever disagree.
-        versionCode = 500
-        versionName = "0.5.0"
+        versionCode = 600
+        versionName = "0.6.0"
 
         // false for an F-Droid build: F-Droid ships its own updates, and its
         // inclusion policy wants no phoning home it did not ask for.

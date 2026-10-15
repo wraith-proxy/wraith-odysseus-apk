@@ -1,3 +1,9 @@
+## android-0.6.0 (2026-10-15)
+
+### Features
+
+- keep the newest chat reply in view, clear Log out of the navigation bar
+
 ## android-0.5.0 (2026-10-10)
 
 ### Features

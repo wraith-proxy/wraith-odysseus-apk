@@ -1,0 +1,2 @@
+Features:
+- keep the newest chat reply in view, clear Log out of the navigation bar
