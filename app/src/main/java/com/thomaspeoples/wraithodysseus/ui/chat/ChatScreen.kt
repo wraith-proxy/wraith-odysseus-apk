@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -147,8 +148,16 @@ fun ChatScreen(
         // The run's mode (turn_mode) lands on the message that started it, as in the web.
         val lastUser = remember(vm.messages) { vm.messages.lastOrNull { it.role == "user" } }
         val liveMode = vm.live?.details
+        val listState = rememberLazyListState()
+        // A reversed list keeps the old newest item anchored when a new one lands above it,
+        // so a reader at the bottom is left with the reply just out of view. Follow it down
+        // unless they have scrolled up (a prompt and reply add two items, hence the slack).
+        LaunchedEffect(bottomFirst.firstOrNull()?.dbId, bottomFirst.size, vm.live != null) {
+            if (listState.firstVisibleItemIndex in 1..4) listState.animateScrollToItem(0)
+        }
         LazyColumn(
             Modifier.weight(1f).fillMaxWidth(),
+            state = listState,
             reverseLayout = true,
             contentPadding = PaddingValues(12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
