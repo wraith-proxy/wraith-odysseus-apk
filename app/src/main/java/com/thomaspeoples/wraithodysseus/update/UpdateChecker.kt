@@ -45,10 +45,16 @@ object UpdateChecker {
         "com.looker.droidify",
         "com.machiav3lli.fdroid",
         "dev.zapstore.app.fdroid",
+        "com.aurora.adroid",
+        "org.fdroid.fdroid.privileged",
     )
 
-    internal fun enabledFor(installer: String?): Boolean =
-        BuildConfig.UPDATE_CHECK && installer !in FDROID_INSTALLERS
+    // updateCheck is a parameter so the unit tests (a debug build, where the
+    // flag is false) can still pin the installer list.
+    internal fun enabledFor(
+        installer: String?,
+        updateCheck: Boolean = BuildConfig.UPDATE_CHECK,
+    ): Boolean = updateCheck && installer !in FDROID_INSTALLERS
 
     /** Whether this install should check Gitea for updates at all. */
     fun enabled(context: Context): Boolean = enabledFor(
