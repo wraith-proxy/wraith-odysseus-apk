@@ -49,7 +49,7 @@ Compare and Cookbook stay in the web UI; their drawer rows open it.
 
 ## F-Droid
 
-Ready now: no proprietary dependencies, `INTERNET` only, checksummed wrapper,
+In place: no proprietary dependencies, `INTERNET` only, checksummed wrapper,
 no dependency-info block, `UPDATE_CHECK` switch, a linted recipe with
 automatic updates, a literal versionCode and per-versionCode changelogs kept
 by the bump hook, and fastlane screenshots.
@@ -58,16 +58,18 @@ by the bump hook, and fastlane screenshots.
   [fdroiddata!51956](https://gitlab.com/fdroid/fdroiddata/-/merge_requests/51956).
 - [x] Bake fdroidserver into the runner image, like the scan tools.
 
-Next release, from the fdroiddata review:
-
-- [ ] Add Aurora Droid (`com.aurora.adroid`) and the Privileged Extension
-      (`org.fdroid.fdroid.privileged`) to `FDROID_INSTALLERS`, so those
-      installs skip the update check too.
-- [ ] Demo mode: try the app with no server, on canned chats, mail and
-      tools, so testers can check it without an Odysseus install.
+From the fdroiddata review:
 
 - [x] Reproducible builds: F-Droid's build image reproduces the CI APK, so
   the recipe ships this project's signature (`Binaries:`,
   `AllowedAPKSigningKeys`).
 - [x] A CI job that runs F-Droid's build image against each release, so a
   release that stops reproducing is caught here, not by F-Droid.
+- [x] 0.6.1: add Aurora Droid (`com.aurora.adroid`) and the Privileged
+      Extension (`org.fdroid.fdroid.privileged`) to `FDROID_INSTALLERS`, so
+      those installs skip the update check too.
+
+0.7.0:
+
+- [ ] Demo mode: try the app with no server, on canned chats, mail and
+      tools, so testers can check it without an Odysseus install.

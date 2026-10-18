@@ -8,16 +8,21 @@ changes. Not affiliated with the Odysseus project.
 
 ## What it does
 
-Status: feature-complete for 0.1.0 and waiting on the first release and a
-run through the device checklist; [the roadmap](ROADMAP.md) has the details.
+Status: released on F-Droid and Gitea Releases. The real-phone device
+checklist is still open; [the roadmap](ROADMAP.md) has the details.
 
-- **Chats.** The session list, history with "load older", and streaming
-  replies with the model's thinking shown separately. There is a model picker,
-  agent, web and research modes, tool approvals, attachments, search and stop.
-  A run survives the screen going off: the app resumes the stream and rebuilds
-  it from the server's replay.
-- **Email.** Every unread message across every enabled account, merged and
-  sorted. You can read a message (as text), mark it unread, send, and reply.
+- **Chats.** The session list, history, and streaming replies with the model's
+  thinking shown separately. There is a model picker, agent, web and research
+  modes, tool approvals, photo and file attachments, search and stop. A run
+  survives the screen going off and is rebuilt from the server's replay. Hold
+  a message to copy, edit, resend, regenerate, fork, rewrite or delete it; hold
+  a chat to rename, favourite, copy, move to a folder, archive or delete it.
+- **Email.** Accounts, folders, filters and search. HTML mail loads images
+  only on request; attachments, mark unread, send, reply, reply all, forward,
+  translate, schedule send and AI reply.
+- **Tools.** Native screens for Notes, Calendar, Memory, Skills, Deep
+  Research, Tasks, Gallery, Library and Theme. Compare and Cookbook open the
+  web UI.
 - **The rest.** About (version, licences, the update-check disclosure), an
   FAQ, log out, and a dialog when a newer release exists.
 

@@ -30,12 +30,11 @@ page, tagged `android-X.Y.Z`.
   on the phone. It tracks releases automatically.
 - **Direct sideload:** download the APK from Releases and open it. The app also
   checks for a newer release itself on launch.
-- **F-Droid:** submitted in
-  [fdroiddata!51956](https://gitlab.com/fdroid/fdroiddata/-/merge_requests/51956);
-  the badge above works once it is merged and published. The recipe is in
-  [docs/fdroid/](docs/fdroid/com.thomaspeoples.wraithodysseus.yml) and CI
-  lints it; see
-  [docs/android-distribution.md](docs/android-distribution.md#f-droid).
+- **F-Droid:** live, via
+  [fdroiddata!51956](https://gitlab.com/fdroid/fdroiddata/-/merge_requests/51956).
+  The reference recipe is in
+  [docs/fdroid/](docs/fdroid/com.thomaspeoples.wraithodysseus.yml) and CI lints
+  it; see [docs/android-distribution.md](docs/android-distribution.md#f-droid).
 
 Then enter your server's address and log in with your Odysseus username,
 password and (if enabled) 2FA code. The app needs to reach the server the same
@@ -47,21 +46,28 @@ phone.
 ```
 your Odysseus server  (stock 1.0.3, cookie session, no server changes)
   |
-  +-- Chats -------------------------------------------------+
-  |   session list, history, streaming replies with thinking  |
-  |   model picker, agent / web / research, tool approvals    |
-  |   attachments, search, stop -- survives screen-off        |
+  +-- Chats --------------------------------------------------+
+  |   streaming replies with thinking, model picker, modes    |
+  |   tool approvals, attachments, search, stop, sources      |
+  |   hold a message: copy, edit, regenerate, fork, delete    |
+  |   folders, favourites, archive -- survives screen-off     |
   +-----------------------------------------------------------+
   |
-  +-- Email -------------------------------------------------+
-  |   every unread message across every account, merged      |
-  |   read, mark unread, send, reply                         |
+  +-- Email --------------------------------------------------+
+  |   accounts, folders, filters, search, HTML mail           |
+  |   attachments, send, reply, forward, schedule send        |
+  |   translate, AI reply, mark unread                        |
+  +-----------------------------------------------------------+
+  |
+  +-- Tools --------------------------------------------------+
+  |   Notes, Calendar, Memory, Skills, Deep Research          |
+  |   Tasks, Gallery, Library, Theme                          |
   +-----------------------------------------------------------+
 ```
 
 Laid out like the web UI: a chat is the home screen, and a drawer from the
 right (its sidebar) holds New Chat, Search, the chats, Email, the Tools and
-Settings. Tools the app does not have yet open the web UI instead.
+Settings. Compare and Cookbook open the web UI instead.
 If the server ends the session early, the login screen opens over whatever
 you were doing and returns you there once you log in again as the same
 account.

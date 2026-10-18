@@ -47,39 +47,41 @@ reach it.
 
 On launch the app asks this repo's Gitea releases API whether a newer
 `android-X.Y.Z` exists, and offers a link if so. That is the only request it
-makes to anything other than your own server. It is skipped when an F-Droid
-client (F-Droid, F-Droid Basic, Droid-ify, Neo Store) installed the app: that
-is decided at runtime because F-Droid ships the same APK as Releases. Build
-with `updateCheck=false` (`local.properties`, a `-PupdateCheck=false` Gradle
-property, or the `updateCheck` environment variable) and the check is
-compiled out altogether.
+makes to anything other than your own server. It is skipped when F-Droid or
+one of the other F-Droid clients (`FDROID_INSTALLERS` in
+[`UpdateChecker.kt`](../app/src/main/java/com/thomaspeoples/wraithodysseus/update/UpdateChecker.kt))
+installed the app: that is decided at runtime because F-Droid ships the same
+APK as Releases. Build with `updateCheck=false` (`local.properties`, a
+`-PupdateCheck=false` Gradle property, or the `updateCheck` environment
+variable) and the check is compiled out altogether.
 
 ## F-Droid
 
-Not submitted yet. Already in place: no proprietary dependencies, `INTERNET` as
+On F-Droid via
+[fdroiddata!51956](https://gitlab.com/fdroid/fdroiddata/-/merge_requests/51956).
+What got it there: no proprietary dependencies, `INTERNET` as
 the only permission (the merged manifest also carries AndroidX's own
 signature-level `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`, which every
 AndroidX app has and which grants nothing), a checksummed Gradle wrapper, no
 AGP dependency-info block (`release.yml` fails if one appears), and an update
 check that is off for F-Droid installs.
 
-The fdroiddata recipe is
+The reference recipe is
 [`docs/fdroid/com.thomaspeoples.wraithodysseus.yml`](https://git.thomaspeoples.com/thomaspeoples/wraith-odysseus-apk/src/branch/main/docs/fdroid/com.thomaspeoples.wraithodysseus.yml).
 It is a reproducible build: F-Droid builds the tag, checks that the result is
 byte-for-byte the APK attached to the Gitea release (`Binaries:`), and ships
 that APK with this project's signature (`AllowedAPKSigningKeys`). CI runs
-`fdroid lint` on it. A local run of F-Droid's own build image
-(`buildserver-trixie`, JDK 21) reproduced the CI-built 0.2.0 APK exactly.
+`fdroid lint` on it, and rebuilds every release in F-Droid's own build image
+(see [ci.md](ci.md)).
 
-After the one merge request, releases are automatic: the recipe sets
-`AutoUpdateMode: Version` and `UpdateCheckMode: Tags`, so F-Droid finds each
-new `android-*` tag and reads the literal `versionCode` and `versionName` in
-`app/build.gradle.kts` there. The listing text, screenshots and release notes
-come from `fastlane/metadata/android/en-US/`; the bump hook writes
+Releases are automatic: the recipe sets `AutoUpdateMode: Version` and
+`UpdateCheckMode: Tags`, so F-Droid finds each new `android-*` tag and reads
+the literal `versionCode` and `versionName` in `app/build.gradle.kts` there.
+The listing text, screenshots and release notes come from
+`fastlane/metadata/android/en-US/`; the bump hook writes
 `changelogs/<versionCode>.txt` each release.
 
-To submit: fork `gitlab.com/fdroid/fdroiddata`, copy the recipe to
-`metadata/com.thomaspeoples.wraithodysseus.yml`, and open a merge request.
+The live recipe is fdroiddata's copy; the file here is the reference copy.
 Because the F-Droid APK is the release APK, an F-Droid copy, an Obtainium copy
 and a Releases copy all update one another. A release whose build stops
 reproducing is not published by F-Droid until it is fixed; nothing is ever
