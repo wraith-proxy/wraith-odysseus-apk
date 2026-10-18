@@ -1,10 +1,8 @@
-Wraith for Odysseus puts your own self-hosted Odysseus AI server on your
-phone: your chats, and every unread email across your accounts.
+Wraith for Odysseus puts your own self-hosted Odysseus AI server on your phone: your chats, and every unread email across your accounts.
 
 Unofficial, not affiliated with the Odysseus project.
 
-Requires your own Odysseus server (tested with 1.0.3). The app talks to it
-over the same routes its web UI uses, so the server needs no changes.
+Requires your own Odysseus server (tested with 1.0.3). The app talks to it over the same routes its web UI uses, so the server needs no changes.
 
 Chats:
 * every chat session, with search and new chats
@@ -12,30 +10,18 @@ Chats:
 * model picker, and agent, web and research modes
 * approve or deny tool calls; a Terminal toggle for accounts allowed to use it
 * photo and file attachments
-* stop a reply, or switch away and come back: a running reply is picked up
-  again from the server without doubled text
+* stop a reply, or switch away and come back: a running reply is picked up again from the server without doubled text
 
 Email:
-* every unread message in the inbox of every enabled account, merged and
-  newest first
+* every unread message in the inbox of every enabled account, merged and newest first
 * read as plain text, mark unread, send and reply
 
-You log in with your Odysseus username, password and 2FA code, just as in the
-web UI. Only the resulting session cookie is stored, encrypted with a key that
-never leaves the device. Your password is never stored.
+You log in with your Odysseus username, password and 2FA code, just as in the web UI. Only the resulting session cookie is stored, encrypted with a key that never leaves the device. Your password is never stored.
 
-https only: plain http is refused, so your session is never sent
-unencrypted. On a tailnet, Tailscale's https certificates for *.ts.net names
-work as is.
+https only: plain http is refused, so your session is never sent unencrypted. On a tailnet, Tailscale's https certificates for *.ts.net names work as is.
 
-Update check: builds downloaded from this project's releases check its Gitea
-releases page once per launch and offer a link when a newer version exists.
-Nothing about you or your server is sent. When F-Droid installed the app the
-check is off, and it contacts nothing but your own server.
+Update check: builds downloaded from this project's releases check its Gitea releases page once per launch and offer a link when a newer version exists. Nothing about you or your server is sent. When F-Droid installed the app the check is off, and it contacts nothing but your own server.
 
-No analytics, no tracking, no Google Play Services. The only permission is
-Internet access.
+No analytics, no tracking, no Google Play Services. The only permission is Internet access.
 
-Not distributed via Google Play. Besides F-Droid, it is on this project's
-Gitea releases, which Obtainium can track. Builds are reproducible: F-Droid
-ships the same APK, signed with the same key, so all three update each other.
+Not distributed via Google Play. Besides F-Droid, it is on this project's Gitea releases, which Obtainium can track. Builds are reproducible: F-Droid ships the same APK, signed with the same key, so all three update each other.

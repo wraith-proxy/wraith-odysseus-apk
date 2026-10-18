@@ -36,9 +36,9 @@ Repo: https://git.thomaspeoples.com/thomaspeoples/wraith-odysseus-apk.git
 Binaries: https://git.thomaspeoples.com/thomaspeoples/wraith-odysseus-apk/releases/download/android-%v/wraith-odysseus.apk
 
 Builds:
-  - versionName: 0.4.0
-    versionCode: 400
-    commit: android-0.4.0
+  - versionName: 0.6.0
+    versionCode: 600
+    commit: android-0.6.0
     subdir: app
     gradle:
       - yes
@@ -47,5 +47,5 @@ AllowedAPKSigningKeys: 76a8f103feb1f229049f167cb7ee224b7f2b4123a364bd1591b618493
 
 AutoUpdateMode: Version
 UpdateCheckMode: Tags ^android-[0-9.]+$
-CurrentVersion: 0.4.0
-CurrentVersionCode: 400
+CurrentVersion: 0.6.0
+CurrentVersionCode: 600
