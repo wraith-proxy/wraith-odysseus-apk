@@ -62,9 +62,16 @@ class UpdateCheckerTest {
     // sideload cases are pinned to the flag rather than to true.
     @Test
     fun anFdroidInstallNeverChecksAndOthersFollowTheBuildFlag() {
-        assertFalse(UpdateChecker.enabledFor("org.fdroid.fdroid"))
-        assertFalse(UpdateChecker.enabledFor("org.fdroid.basic"))
-        assertFalse(UpdateChecker.enabledFor("com.looker.droidify"))
+        listOf(
+            "org.fdroid.fdroid",
+            "org.fdroid.basic",
+            "com.looker.droidify",
+            "com.machiav3lli.fdroid",
+            "dev.zapstore.app.fdroid",
+            "com.aurora.adroid",
+            "org.fdroid.fdroid.privileged",
+        ).forEach { assertFalse(it, UpdateChecker.enabledFor(it, updateCheck = true)) }
+        assertTrue(UpdateChecker.enabledFor("dev.imranr.obtainium", updateCheck = true))
         assertEquals(BuildConfig.UPDATE_CHECK, UpdateChecker.enabledFor(null))
         assertEquals(BuildConfig.UPDATE_CHECK, UpdateChecker.enabledFor("dev.imranr.obtainium"))
         assertEquals(BuildConfig.UPDATE_CHECK, UpdateChecker.enabledFor("com.google.android.packageinstaller"))
