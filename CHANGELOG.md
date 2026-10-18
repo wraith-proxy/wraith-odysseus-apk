@@ -1,3 +1,9 @@
+## android-0.6.1 (2026-10-18)
+
+### Bug Fixes
+
+- skip the update check for Aurora Droid and F-Droid Privileged Extension installs
+
 ## android-0.6.0 (2026-10-15)
 
 ### Features

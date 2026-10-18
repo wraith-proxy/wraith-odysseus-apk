@@ -1,0 +1,2 @@
+Bug Fixes:
+- skip the update check for Aurora Droid and F-Droid Privileged Extension installs
