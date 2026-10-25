@@ -1,6 +1,8 @@
 package com.thomaspeoples.wraithodysseus.demo
 
 import com.thomaspeoples.wraithodysseus.chat.ChatApi
+import com.thomaspeoples.wraithodysseus.chat.ChatRequest
+import com.thomaspeoples.wraithodysseus.chat.Toggles
 import com.thomaspeoples.wraithodysseus.email.EmailApi
 import com.thomaspeoples.wraithodysseus.net.Http
 import com.thomaspeoples.wraithodysseus.net.SessionCookie
@@ -78,6 +80,16 @@ class DemoTest {
             )
         }
         assertTrue("ChatApi.models empty", ChatApi(http).models().isNotEmpty())
+    }
+
+    @Test
+    fun newChatReplyStaysAfterReload() = runBlocking {
+        val api = ChatApi(http)
+        val id = api.createSession("New chat", "ep-demo", "demo-llm")
+        assertNull("no run is live", api.resume(id))
+        api.chatStream(ChatRequest(id, "hello demo", Toggles(), null, emptyList(), null)).events.collect {}
+        val texts = api.history(id, null).messages.map { it.content }
+        assertTrue(texts.toString(), "hello demo" in texts && DEMO_REPLY in texts)
     }
 
     @Test

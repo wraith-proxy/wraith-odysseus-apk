@@ -35,6 +35,9 @@ private val ctx: (Int, Int) -> String = { msgs, used ->
     """{"used_tokens":${used},"context_length":32768,"context_percent":${used * 100.0 / 32768},"messages":${msgs},"model":"demo-llm","can_compact":${msgs >= 6},"memory_extraction_enabled":true,"memory_injection_enabled":true,"skill_injection_enabled":true,"thinking_mode":"off","thinking_supported":false,"temperature_override":null,"max_tokens_override":null}"""
 }
 
+/** The canned chat reply; Demo also keeps it in a chat's history once sent. */
+internal const val DEMO_REPLY = "This is demo mode, so replies are canned. On your own Odysseus server this is where the model answers."
+
 private const val NO_JOBS = """{"jobs":[]}"""
 
 private val sessionRow: (String, String, Long, Long, Int, Boolean, String) -> String = { id, name, upd, created, count, star, folder ->
@@ -179,6 +182,8 @@ ${archivedRow("demo-a3", "Birthday gift list", 43200, 2)}
 {"message_id":"m-4-2","session_id":"demo-s4","session_name":"Lisbon trip ideas","role":"assistant","content_snippet":"Walk through Alfama, ride tram 28, visit Belem","timestamp":"${naive(5799)}"}
 ]""",
 
+    "POST /api/session" to """{"id":"demo-new"}""",
+
     "POST /api/chat_stream" to """data: {"type":"model_info","model":"demo-llm"}
 
 data: {"delta":"This is demo mode, "}
@@ -191,7 +196,7 @@ data: {"delta":"server this is where "}
 
 data: {"delta":"the model answers."}
 
-data: {"type":"final_response","content":"This is demo mode, so replies are canned. On your own Odysseus server this is where the model answers.","delta":"This is demo mode, so replies are canned. On your own Odysseus server this is where the model answers."}
+data: {"type":"final_response","content":"${DEMO_REPLY}","delta":"${DEMO_REPLY}"}
 
 data: {"type":"metrics","data":{"response_time":1.2,"tokens_per_second":38.0,"input_tokens":42,"output_tokens":24,"usage_source":"real","context_percent":0.2,"context_length":32768,"model":"demo-llm"}}
 
