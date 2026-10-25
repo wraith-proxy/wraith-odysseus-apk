@@ -93,6 +93,30 @@ class DemoTest {
     }
 
     @Test
+    fun queryFiltersWork() {
+        fun rows(path: String, query: String?, key: String) =
+            JSONObject(Demo.respond("GET", path, query).first).getJSONArray(key).let { a -> (0 until a.length()).map(a::getJSONObject) }
+        val unread = rows("/api/email/list", "filter=unread&limit=50", "emails")
+        assertTrue(unread.isNotEmpty() && unread.none { it.optBoolean("is_read") })
+        assertTrue(rows("/api/email/list", "filter=all", "emails").any { it.optBoolean("is_read") })
+        val archived = rows("/api/notes", "archived=true", "notes")
+        assertTrue(archived.isNotEmpty() && archived.all { it.optBoolean("archived") })
+        assertTrue(rows("/api/notes", null, "notes").none { it.optBoolean("archived") })
+    }
+
+    @Test
+    fun galleryImagesDecodeAndWritesAnswer() = runBlocking {
+        for (g in listOf("demo-img-1.png", "demo-img-3.jpg")) {
+            val png = GalleryApi(http).imageBytes("/api/generated-image/$g")
+            assertEquals(0x89, png[0].toInt() and 0xff)
+        }
+        assertEquals("Forked chat", ChatApi(http).fork("demo-s1", 2).name)
+        assertTrue(ChatApi(http).invokeSkill("any", "x").isNotBlank())
+        assertEquals("demo-file", ChatApi(http).upload("a.txt", "text/plain", byteArrayOf(1)).id)
+        assertEquals("ev1", JSONObject(Demo.respond("POST", "/api/calendar/events").first).getJSONObject("event").getString("uid"))
+    }
+
+    @Test
     fun mailParses() = runBlocking {
         assertTrue("EmailApi.accounts empty", EmailApi(http).accounts().isNotEmpty())
         val page = EmailApi(http).unreadPage(null, 0)

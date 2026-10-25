@@ -2,6 +2,7 @@ package com.thomaspeoples.wraithodysseus.demo
 
 import com.thomaspeoples.wraithodysseus.net.SessionCookie
 import java.time.Instant
+import java.util.Base64
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -11,7 +12,9 @@ import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
 import okhttp3.Protocol
+import okhttp3.Request
 import okhttp3.Response
+import okhttp3.ResponseBody
 import okhttp3.ResponseBody.Companion.toResponseBody
 import okio.Buffer
 import org.json.JSONArray
@@ -53,9 +56,36 @@ object Demo {
         }
     }
 
+    // Writes whose reply the app parses, for ids the fixtures cannot list one by one.
+    private val replies: List<Triple<String, Regex, String>> by lazy {
+        listOf(
+            Triple("POST", Regex("/api/session/[^/]+/fork"), """{"id":"demo-fork","name":"Forked chat","kept":2}"""),
+            Triple("POST", Regex("/api/skills/[^/]+/invoke"), """{"message":"Demo mode: skills are not run."}"""),
+            Triple("POST", Regex("/api/upload"), """{"files":[{"id":"demo-file","name":"upload","mime":"application/octet-stream"}]}"""),
+            Triple("POST", Regex("/api/calendar/events"), routes.getValue("GET /api/calendar/events/ev1")),
+            Triple("PUT", Regex("/api/calendar/events/.+"), routes.getValue("GET /api/calendar/events/ev1")),
+        )
+    }
+
+    /** What the server does with the query: the unread mail filter and archived notes. */
+    private fun filtered(path: String, query: String?, body: String): String {
+        val q = query.orEmpty().split('&')
+        fun keep(key: String, want: (JSONObject) -> Boolean): String {
+            val o = JSONObject(body)
+            val all = o.getJSONArray(key)
+            val kept = JSONArray((0 until all.length()).map(all::getJSONObject).filter(want))
+            return o.put(key, kept).also { if (it.has("total")) it.put("total", kept.length()) }.toString()
+        }
+        return when {
+            path == "/api/email/list" && "filter=unread" in q -> keep("emails") { !it.optBoolean("is_read") }
+            path == "/api/notes" -> keep("notes") { it.optBoolean("archived") == ("archived=true" in q) }
+            else -> body
+        }
+    }
+
     /** Returns (body, media type). */
-    fun respond(method: String, path: String): Pair<String, String> {
-        val hit = routes["$method $path"]
+    fun respond(method: String, path: String, query: String? = null): Pair<String, String> {
+        val hit = routes["$method $path"]?.let { filtered(path, query, it) }
         val extra = if (method == "GET") sent[path.removePrefix("/api/history/")] else null
         if (extra != null && path.startsWith("/api/history/")) {
             val o = JSONObject(hit ?: """{"history":[],"offset":0,"has_more_before":false}""")
@@ -74,6 +104,7 @@ object Demo {
         }
         if (method == "GET" || method == "HEAD") return "{}" to "application/json"
         _writes.tryEmit(Unit)
+        replies.firstOrNull { it.first == method && it.second.matches(path) }?.let { return it.third to "application/json" }
         return "{\"success\":true,\"ok\":true}" to "application/json"
     }
 }
@@ -90,15 +121,20 @@ class DemoInterceptor : Interceptor {
             }
             Demo.sent(f["session"] ?: return@let, f["message"] ?: return@let)
         }
-        val (body, type) = Demo.respond(r.method, r.url.encodedPath)
+        demoImages[r.url.encodedPath.removePrefix("/api/generated-image/")]?.let {
+            return reply(r, Base64.getDecoder().decode(it).toResponseBody("image/png".toMediaType()))
+        }
+        val (body, type) = Demo.respond(r.method, r.url.encodedPath, r.url.encodedQuery)
         // 404 is how the server says no run is live; a 200 would look like one.
         val code = if (r.url.encodedPath.startsWith("/api/chat/resume/")) 404 else 200
-        return Response.Builder()
-            .request(r)
-            .protocol(Protocol.HTTP_1_1)
-            .code(code)
-            .message("OK")
-            .body(body.toResponseBody(type.toMediaType()))
-            .build()
+        return reply(r, body.toResponseBody(type.toMediaType()), code)
     }
+
+    private fun reply(r: Request, body: ResponseBody, code: Int = 200) = Response.Builder()
+        .request(r)
+        .protocol(Protocol.HTTP_1_1)
+        .code(code)
+        .message("OK")
+        .body(body)
+        .build()
 }
