@@ -1,0 +1,6 @@
+Features:
+- silence semgrep hardcoded-credential finding on demo label
+- demo walkthrough on first entry
+- demo filters, gallery tiles and create replies
+- demo chats answer and keep the reply
+- demo mode, try the app with no server

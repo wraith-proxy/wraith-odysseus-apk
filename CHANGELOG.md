@@ -1,3 +1,13 @@
+## android-0.7.0 (2026-10-25)
+
+### Features
+
+- silence semgrep hardcoded-credential finding on demo label
+- demo walkthrough on first entry
+- demo filters, gallery tiles and create replies
+- demo chats answer and keep the reply
+- demo mode, try the app with no server
+
 ## android-0.6.1 (2026-10-18)
 
 ### Bug Fixes
