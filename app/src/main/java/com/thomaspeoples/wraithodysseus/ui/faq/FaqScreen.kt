@@ -41,6 +41,10 @@ private val faqEntries: List<Pair<String, String>> = listOf(
     "What is this app?" to
         "An unofficial Android client for a self-hosted Odysseus AI server: your chats and your " +
             "unread email, on the phone. It is not made by or affiliated with the Odysseus project.",
+    "Can I try it without a server?" to
+        "Yes. On the login screen, tap \"No server? Try the demo\". It opens the app on made-up " +
+            "chats, mail and tools. Nothing you do there is saved and nothing leaves the phone. " +
+            "Log out to leave the demo.",
     "Does my server need changing?" to
         "No. The app uses only the routes the server's own web UI uses, and was tested against " +
             "Odysseus 1.0.3.",

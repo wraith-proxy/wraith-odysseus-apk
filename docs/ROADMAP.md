@@ -71,5 +71,5 @@ From the fdroiddata review:
 
 0.7.0:
 
-- [ ] Demo mode: try the app with no server, on canned chats, mail and
+- [x] Demo mode: try the app with no server, on canned chats, mail and
       tools, so testers can check it without an Odysseus install.

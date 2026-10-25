@@ -1,5 +1,6 @@
 package com.thomaspeoples.wraithodysseus.auth
 
+import com.thomaspeoples.wraithodysseus.demo.Demo
 import com.thomaspeoples.wraithodysseus.net.ApiException
 import com.thomaspeoples.wraithodysseus.net.Http
 import com.thomaspeoples.wraithodysseus.net.SessionState
@@ -101,6 +102,15 @@ class AuthRepo(private val http: Http, private val session: SessionState) {
             // Nothing to do: an unreachable server cannot be told.
         } finally {
             session.cookie = null
+        }
+    }
+
+    /** Demo mode: the demo origin and a placeholder cookie that never
+     * expires, so every call goes to DemoInterceptor and none leaves the phone. */
+    suspend fun startDemo() {
+        withContext(Dispatchers.IO) {
+            session.baseUrl = Demo.origin
+            session.cookie = Demo.cookie
         }
     }
 

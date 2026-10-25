@@ -20,6 +20,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -41,6 +42,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.thomaspeoples.wraithodysseus.R
 import com.thomaspeoples.wraithodysseus.WraithOdysseusApp
 import com.thomaspeoples.wraithodysseus.auth.AuthRepo
+import com.thomaspeoples.wraithodysseus.demo.Demo
 
 /** Server address, then username and password, then a 2FA code if the
  * server asks for one. [onLoggedIn] fires once the cookie is stored. */
@@ -50,7 +52,7 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
     val vm = viewModel {
         LoginViewModel(
             repo = AuthRepo(app.http, app.session),
-            initialUrl = app.session.baseUrl?.toString().orEmpty(),
+            initialUrl = app.session.baseUrl?.takeUnless { Demo.isDemo(it) }?.toString().orEmpty(),
             initialUsername = app.session.username.orEmpty(),
             saveConnection = { origin, username ->
                 app.session.baseUrl = origin
@@ -155,6 +157,7 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
                     Text(if (state.needsTotp) "Verify" else "Log in", style = MaterialTheme.typography.labelLarge)
                 }
             }
+            TextButton(onClick = vm::startDemo, enabled = !state.busy) { Text("No server? Try the demo") }
         }
     }
 }

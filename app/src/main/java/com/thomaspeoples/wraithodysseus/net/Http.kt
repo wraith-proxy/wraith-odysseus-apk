@@ -1,5 +1,6 @@
 package com.thomaspeoples.wraithodysseus.net
 
+import com.thomaspeoples.wraithodysseus.demo.DemoInterceptor
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resumeWithException
@@ -41,6 +42,7 @@ class Http(
         .readTimeout(JSON_TIMEOUT_S, TimeUnit.SECONDS)
         .followRedirects(false)
         .followSslRedirects(false)
+        .addInterceptor(DemoInterceptor())
         .apply(tls)
         .build()
 
