@@ -27,6 +27,7 @@ import org.json.JSONObject
 object Demo {
     const val HOST = "demo.invalid"
     val origin: HttpUrl = "https://demo.invalid/".toHttpUrl()
+    // nosemgrep: mobsf.mobsfscan.kotlin.android.android_kotlin_hardcoded -- public demo label, not a credential
     const val USERNAME = "demo"
     val cookie = SessionCookie("demo", Long.MAX_VALUE, secure = true)
 
