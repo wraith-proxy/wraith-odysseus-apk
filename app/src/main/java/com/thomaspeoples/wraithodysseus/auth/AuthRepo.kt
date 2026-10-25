@@ -1,6 +1,7 @@
 package com.thomaspeoples.wraithodysseus.auth
 
 import com.thomaspeoples.wraithodysseus.demo.Demo
+import com.thomaspeoples.wraithodysseus.demo.DemoTour
 import com.thomaspeoples.wraithodysseus.net.ApiException
 import com.thomaspeoples.wraithodysseus.net.Http
 import com.thomaspeoples.wraithodysseus.net.SessionState
@@ -111,6 +112,7 @@ class AuthRepo(private val http: Http, private val session: SessionState) {
         withContext(Dispatchers.IO) {
             session.baseUrl = Demo.origin
             session.cookie = Demo.cookie
+            DemoTour.start()
         }
     }
 
