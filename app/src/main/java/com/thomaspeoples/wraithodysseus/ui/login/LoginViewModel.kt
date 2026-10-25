@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.thomaspeoples.wraithodysseus.auth.AuthRepo
 import com.thomaspeoples.wraithodysseus.auth.LoginResult
+import com.thomaspeoples.wraithodysseus.demo.Demo
 import com.thomaspeoples.wraithodysseus.net.HostPolicy
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -118,6 +119,17 @@ class LoginViewModel(
                     it.copy(busy = false, error = result.message, totpCode = "")
                 }
             }
+        }
+    }
+
+    /** Into demo mode: no server, canned data, nothing saved. */
+    fun startDemo() {
+        if (_state.value.busy) return
+        _state.update { it.copy(busy = true, error = null) }
+        viewModelScope.launch {
+            repo.startDemo()
+            saveConnection(Demo.origin, Demo.USERNAME)
+            _state.update { it.copy(busy = false, password = "", totpCode = "", loggedIn = true) }
         }
     }
 

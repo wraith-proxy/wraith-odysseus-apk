@@ -19,6 +19,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import com.thomaspeoples.wraithodysseus.demo.DemoTourDialog
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -299,6 +300,8 @@ fun AppNav() {
     }
 
     val toolEnv = ToolEnv(app.http, app.session.baseUrl?.toString(), status, ::openDrawer) { nav.openChat(it) }
+
+    if (loggedIn) DemoTourDialog()
 
     CompositionLocalProvider(LocalSnackbar provides snackbar) {
         EndDrawer(

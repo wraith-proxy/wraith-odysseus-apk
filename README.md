@@ -41,6 +41,10 @@ password and (if enabled) 2FA code. The app needs to reach the server the same
 way your browser does: on a tailnet, that means Tailscale connected on the
 phone.
 
+No server yet? Tap **No server? Try the demo** on the login screen. It runs
+on canned chats, mail and tools; nothing is saved and nothing leaves the
+phone. Log out to leave it.
+
 ## 🗺️ What it does
 
 ```
